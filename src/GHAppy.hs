@@ -169,7 +169,7 @@ saveIssue :: Members '[Reader Settings, IO] fs => Issue -> Eff fs FilePath
 saveIssue i@Issue {..} = do
   let ticketContent = formatIssue i
   fileName <- fst <$> filePath i
-  send $ flip writeFile ticketContent $ fileName
+  send $ writeFile fileName ticketContent
   return fileName
 
 formatIssue :: Issue -> String

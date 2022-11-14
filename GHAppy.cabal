@@ -6,50 +6,53 @@ maintainer:         cstmlcodes@gmail.com
 extra-source-files: CHANGELOG.md
 
 common settings
-    build-depends:
-        base,    
-        aeson,
-        http-conduit,
-        lens,
-        lens-aeson,
-        text,
-        filepath,
-        directory,
-        mtl,
-        bytestring,
-        data-default,
-        typed-process,
-        containers,
-        freer-simple,
-        vector
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , containers
+    , data-default
+    , directory
+    , filepath
+    , freer-simple
+    , http-conduit
+    , lens
+    , lens-aeson
+    , mtl
+    , text
+    , typed-process
+    , vector
 
-    default-extensions:
-        DeriveAnyClass,
-        DeriveFoldable,
-        DeriveFunctor,
-        DeriveGeneric,
-        DerivingStrategies,
-        FlexibleContexts,
-        GeneralizedNewtypeDeriving,
-        OverloadedStrings,
-        RankNTypes,
-        RecordWildCards,
-        ScopedTypeVariables,
-        TemplateHaskell,
-        TypeApplications,
-        ViewPatterns,
-        GADTs,
-        DataKinds,
-        LambdaCase
+  default-extensions:
+    DataKinds
+    DeriveAnyClass
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DerivingStrategies
+    FlexibleContexts
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    TemplateHaskell
+    TypeApplications
+    ViewPatterns
 
 library
-    import:           settings 
-    hs-source-dir:    src
-    exposed-modules:  GHAppy
+  import:          settings 
+  hs-source-dir:   src
+  exposed-modules: GHAppy
 
 executable GHAppy
-    import:           settings
-    build-depends:    GHAppy,optparse-applicative
-    main-is:          Main.hs
-    hs-source-dirs:   app
-    default-language: Haskell2010
+  import:           settings
+  build-depends:
+    , GHAppy
+    , optparse-applicative
+
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  default-language: Haskell2010
