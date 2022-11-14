@@ -1,0 +1,12 @@
+title: "**Optim Protocol**"
+subtitle: "Audit Report"
+author: "MLabs Audit Team"
+date: \today
+titlegraphic: "./linked-files/images/MLabs-logo.jpg"
+logo: "./linked-files/images/MLabs-logo.jpg"
+fontsize: 10
+colorlinks: true
+graphics: true
+title-on: true
+block-headings: true
+numbersections: true

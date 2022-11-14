@@ -1,0 +1,55 @@
+cabal-version:      2.4
+name:               GHAppy
+version:            0.1.0.0
+author:             Vlad P. Luchian
+maintainer:         cstmlcodes@gmail.com
+extra-source-files: CHANGELOG.md
+
+common settings
+    build-depends:
+        base,    
+        aeson,
+        http-conduit,
+        lens,
+        lens-aeson,
+        text,
+        filepath,
+        directory,
+        mtl,
+        bytestring,
+        data-default,
+        typed-process,
+        containers,
+        freer-simple,
+        vector
+
+    default-extensions:
+        DeriveAnyClass,
+        DeriveFoldable,
+        DeriveFunctor,
+        DeriveGeneric,
+        DerivingStrategies,
+        FlexibleContexts,
+        GeneralizedNewtypeDeriving,
+        OverloadedStrings,
+        RankNTypes,
+        RecordWildCards,
+        ScopedTypeVariables,
+        TemplateHaskell,
+        TypeApplications,
+        ViewPatterns,
+        GADTs,
+        DataKinds,
+        LambdaCase
+
+library
+    import:           settings 
+    hs-source-dir:    src
+    exposed-modules:  GHAppy
+
+executable GHAppy
+    import:           settings
+    build-depends:    GHAppy,optparse-applicative
+    main-is:          Main.hs
+    hs-source-dirs:   app
+    default-language: Haskell2010
