@@ -44,12 +44,21 @@ common settings
 
 library
     import:           settings 
-    hs-source-dir:    src
+    hs-source-dirs:    src
     exposed-modules:  GHAppy
 
 executable GHAppy
     import:           settings
-    build-depends:    GHAppy,optparse-applicative
+    build-depends:    GHAppy,
+                      optparse-applicative
     main-is:          Main.hs
     hs-source-dirs:   app
     default-language: Haskell2010
+
+test-suite GHAppy-Tests
+    import:           settings
+    type:             exitcode-stdio-1.0
+    build-depends:    GHAppy,
+                      tasty
+    hs-source-dirs:   test
+    main-is:          Test.hs
