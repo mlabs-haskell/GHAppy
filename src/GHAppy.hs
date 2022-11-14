@@ -4,8 +4,6 @@
 
 module GHAppy where
 
---( (^..), (^.), (^?),at )
-
 import Control.Arrow (Arrow (second))
 import Control.Exception (catch, throwIO)
 import Control.Lens hiding ((<.>))
@@ -61,6 +59,7 @@ import System.FilePath.Lens (filename)
 import System.IO.Error (isAlreadyExistsError)
 import System.Process.Typed (ExitCode, proc, runProcess)
 import Unsafe.Coerce (unsafeCoerce)
+import Text.Pandoc.App 
 
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
@@ -100,14 +99,16 @@ data GHAppyAct a where
   SetUpDir :: GHAppyAct ()
   PullIssues :: GHAppyAct Issues
   SaveAvailableIssues :: GHAppyAct [FilePath]
-  GeneratePDF :: [Leaf] -> GHAppyAct ExitCode
+  GeneratePDF :: [Leaf] -> GHAppyAct ()
 makeEffect ''GHAppyAct
 
 data Composer a where
+  -- | Adds the Issue with a specific number to the composer.
   AddFile :: IssueN -> Composer ()
+  -- | Adds an empty page for the 
   AddNewPage :: Composer ()
+
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
-  -- BumpLevel :: forall effs a . (Member (State Issues) effs)  => Integer -> Eff (Composer ': effs) a -> Composer a
   AddHeader :: Integer -> String -> Composer ()
 makeEffect ''Composer
 
@@ -127,10 +128,6 @@ compose = reinterpret go
       AddAllPagesThat lvl p ->
         let f = fmap ((\n -> emptyLeaf {issueN = n, level = lvl}) . Just . fst) . M.toList . M.filter (getPredicate p) . unIssues
          in (get >>= tell . f)
-      --  BumpLevel l m ->  do
-      --   (a,w) <- raise $ runCompose'  m
-      --   tell $ (\(lf :: Leaf) -> lf{level = level lf + l}) <$> w
-      --   return a
       AddHeader lvl str -> tell [emptyLeaf {preamble = [replicate (fromEnum lvl) '#' <> " " <> str]}]
 
     emptyLeaf = Leaf {issueN = Nothing, preamble = mempty, level = 0}
@@ -173,7 +170,7 @@ saveIssue i@Issue {..} = do
   return fileName
 
 formatIssue :: Issue -> String
-formatIssue i@Issue {..} = "# " <> title <> "\n\n" <> content <> "\n"
+formatIssue i@Issue {..} = "# " <> title <> "\n\n" <> bumpHeaders 1 content <> "\n"
 
 -- | Saves all the issues available.
 saveAllIssues :: Members '[Reader Settings, State Issues, IO] fs => Eff fs [FilePath]
@@ -216,25 +213,26 @@ pullIssuesImpl = do
   modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
   get
 
-leafToMDPP :: Member (State Issues) fs => Leaf -> Eff fs [String]
+leafToMDPP :: Member (State Issues) fs => Leaf -> Eff fs String
 leafToMDPP Leaf {..} = do
   (Issues s) <- get
   contents <- case issueN of
     Nothing ->
       pure mempty
     Just no -> do
-      let content = [formatIssue (s M.! no)]
+      let content = formatIssue (s M.! no)
       pure $ bumpHeaders level content
-  pure $ preamble <> contents
+  pure $ (unlines preamble) <> contents
 
-bumpHeaders :: Integer -> [String] -> [String]
-bumpHeaders l xs = ns
-  where
-    xs' = mconcat $ fmap lines xs
-    is = fmap (elemIndex '#') xs'
-    sps = mconcat $ (\(i, l) -> case i of Just ind -> [(ind, l)]; Nothing -> []) <$> zip is xs
-    ls = uncurry splitAt <$> sps
-    ns = fmap (\(xs, ys) -> xs <> replicate (fromEnum l) '#' <> ys) ls
+bumpHeaders :: Integer -> String -> String
+bumpHeaders l xs = do
+  l <- f <$> lines xs
+  unlines [l]
+  where 
+    addSym = replicate (fromEnum l) '#'
+    f x = case x of 
+      '#' : _ ->  addSym <> x
+      _ -> x
 
 runPandoc ::
   ( Members
@@ -245,8 +243,7 @@ runPandoc ::
       fs
   , LastMember IO fs
   ) =>
-  [Leaf] ->
-  Eff fs ExitCode
+  [Leaf] -> Eff fs ()
 runPandoc fs = do
   Settings {..} <- ask
   pTplFl <- getPandocTemplateLocation
@@ -254,15 +251,16 @@ runPandoc fs = do
   preamble <- getPreamble
   let tmpFile = "." </> outputDirectory </> "tmp" <.> "md"
   let outFileP = "." </> outputDirectory </> outputFile <.> "pdf"
-  let pandocSettings =
-        [ "-o"
-        , outFileP
-        , "--template=" <> pTplFl
-        ]
-  outContent <- (preamble <>) . unlines . mconcat <$> traverse leafToMDPP fs
+  outContent <- (preamble <>) . unlines  <$> traverse leafToMDPP fs
   sendM $ writeFile tmpFile outContent
-
-  sendM $ runProcess (proc "pandoc" $ pandocSettings <> [tmpFile])
+  sendM $ convertWithOpts $ 
+    defaultOpts 
+    { optFrom = Just $ fromString "markdown"
+    , optTo   = Just $ fromString "pdf"
+    , optOutputFile = Just outFileP
+    , optInputFiles = Just [tmpFile]
+    , optTemplate = Just pTplFl
+    }
 
 getPreamble :: (Members '[Reader Settings] fs, LastMember IO fs) => Eff fs String
 getPreamble = asks preambleLocation >>= sendM . readFile >>= \c -> pure . unlines $ ["---", c, "---"]

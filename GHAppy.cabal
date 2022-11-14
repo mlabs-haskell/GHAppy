@@ -21,7 +21,8 @@ common settings
         typed-process,
         containers,
         freer-simple,
-        vector
+        vector,
+        pandoc
 
     default-extensions:
         DeriveAnyClass,
