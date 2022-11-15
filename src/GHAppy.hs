@@ -58,8 +58,8 @@ import System.FilePath ((<.>), (</>))
 import System.FilePath.Lens (filename)
 import System.IO.Error (isAlreadyExistsError)
 import System.Process.Typed (ExitCode, proc, runProcess)
+import Text.Pandoc.App
 import Unsafe.Coerce (unsafeCoerce)
-import Text.Pandoc.App 
 
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
@@ -105,9 +105,8 @@ makeEffect ''GHAppyAct
 data Composer a where
   -- | Adds the Issue with a specific number to the composer.
   AddFile :: IssueN -> Composer ()
-  -- | Adds an empty page for the 
+  -- | Adds an empty page for the
   AddNewPage :: Composer ()
-
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
   AddHeader :: Integer -> String -> Composer ()
 makeEffect ''Composer
@@ -222,16 +221,16 @@ leafToMDPP Leaf {..} = do
     Just no -> do
       let content = formatIssue (s M.! no)
       pure $ bumpHeaders level content
-  pure $ (unlines preamble) <> contents
+  pure $ unlines preamble <> contents
 
 bumpHeaders :: Integer -> String -> String
 bumpHeaders l xs = do
   l <- f <$> lines xs
   unlines [l]
-  where 
+  where
     addSym = replicate (fromEnum l) '#'
-    f x = case x of 
-      '#' : _ ->  addSym <> x
+    f x = case x of
+      '#' : _ -> addSym <> x
       _ -> x
 
 runPandoc ::
@@ -243,7 +242,8 @@ runPandoc ::
       fs
   , LastMember IO fs
   ) =>
-  [Leaf] -> Eff fs ()
+  [Leaf] ->
+  Eff fs ()
 runPandoc fs = do
   Settings {..} <- ask
   pTplFl <- getPandocTemplateLocation
@@ -251,16 +251,17 @@ runPandoc fs = do
   preamble <- getPreamble
   let tmpFile = "." </> outputDirectory </> "tmp" <.> "md"
   let outFileP = "." </> outputDirectory </> outputFile <.> "pdf"
-  outContent <- (preamble <>) . unlines  <$> traverse leafToMDPP fs
+  outContent <- (preamble <>) . unlines <$> traverse leafToMDPP fs
   sendM $ writeFile tmpFile outContent
-  sendM $ convertWithOpts $ 
-    defaultOpts 
-    { optFrom = Just $ fromString "markdown"
-    , optTo   = Just $ fromString "pdf"
-    , optOutputFile = Just outFileP
-    , optInputFiles = Just [tmpFile]
-    , optTemplate = Just pTplFl
-    }
+  sendM $
+    convertWithOpts $
+      defaultOpts
+        { optFrom = Just $ fromString "markdown"
+        , optTo = Just $ fromString "pdf"
+        , optOutputFile = Just outFileP
+        , optInputFiles = Just [tmpFile]
+        , optTemplate = Just pTplFl
+        }
 
 getPreamble :: (Members '[Reader Settings] fs, LastMember IO fs) => Eff fs String
 getPreamble = asks preambleLocation >>= sendM . readFile >>= \c -> pure . unlines $ ["---", c, "---"]

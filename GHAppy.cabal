@@ -44,9 +44,9 @@ common settings
     ViewPatterns
 
 library
-  import:           settings 
-  hs-source-dirs:   src
-  exposed-modules:  GHAppy
+  import:          settings 
+  hs-source-dirs:  src
+  exposed-modules: GHAppy
 
 executable GHAppy
   import:           settings
@@ -58,9 +58,11 @@ executable GHAppy
     , optparse-applicative
 
 test-suite GHAppy-Tests
-  import:           settings
-  type:             exitcode-stdio-1.0
-  build-depends:    GHAppy,
-                    tasty
-  hs-source-dirs:   test
-  main-is:          Test.hs
+  import:         settings
+  type:           exitcode-stdio-1.0
+  build-depends:
+    , GHAppy
+    , tasty
+
+  hs-source-dirs: test
+  main-is:        Test.hs
