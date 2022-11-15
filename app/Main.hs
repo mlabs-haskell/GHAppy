@@ -17,7 +17,8 @@ main = do
       pullIssues
       fs' <- runCompose $ do
         addHeader 1 "Contents"
-        addAllPagesThat 0 (hasLabel "audit" <> hasLabel "audit-meta")
+        addAllPagesThat 1 (hasLabel "audit" <> hasLabel "audit-meta")
+        addNewPage
         addHeader 1 "Findings"
         addAllPagesThat 1 (hasOnlyLabel "audit")
       generatePDF fs'

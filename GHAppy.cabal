@@ -19,6 +19,7 @@ common settings
     , lens
     , lens-aeson
     , mtl
+    , pandoc
     , text
     , typed-process
     , vector
@@ -43,16 +44,23 @@ common settings
     ViewPatterns
 
 library
-  import:          settings 
-  hs-source-dir:   src
-  exposed-modules: GHAppy
+  import:           settings 
+  hs-source-dirs:   src
+  exposed-modules:  GHAppy
 
 executable GHAppy
   import:           settings
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  default-language: Haskell2010
   build-depends:
     , GHAppy
     , optparse-applicative
 
-  main-is:          Main.hs
-  hs-source-dirs:   app
-  default-language: Haskell2010
+test-suite GHAppy-Tests
+  import:           settings
+  type:             exitcode-stdio-1.0
+  build-depends:    GHAppy,
+                    tasty
+  hs-source-dirs:   test
+  main-is:          Test.hs
