@@ -5,4 +5,6 @@ token.txtresult
 result
 token.txt
 .vscode
+.direnv
+.pre-commit-config.yaml
 out

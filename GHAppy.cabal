@@ -6,60 +6,63 @@ maintainer:         cstmlcodes@gmail.com
 extra-source-files: CHANGELOG.md
 
 common settings
-    build-depends:
-        base,    
-        aeson,
-        http-conduit,
-        lens,
-        lens-aeson,
-        text,
-        filepath,
-        directory,
-        mtl,
-        bytestring,
-        data-default,
-        typed-process,
-        containers,
-        freer-simple,
-        vector,
-        pandoc
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , containers
+    , data-default
+    , directory
+    , filepath
+    , freer-simple
+    , http-conduit
+    , lens
+    , lens-aeson
+    , mtl
+    , pandoc
+    , text
+    , typed-process
+    , vector
 
-    default-extensions:
-        DeriveAnyClass,
-        DeriveFoldable,
-        DeriveFunctor,
-        DeriveGeneric,
-        DerivingStrategies,
-        FlexibleContexts,
-        GeneralizedNewtypeDeriving,
-        OverloadedStrings,
-        RankNTypes,
-        RecordWildCards,
-        ScopedTypeVariables,
-        TemplateHaskell,
-        TypeApplications,
-        ViewPatterns,
-        GADTs,
-        DataKinds,
-        LambdaCase
+  default-extensions:
+    DataKinds
+    DeriveAnyClass
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DerivingStrategies
+    FlexibleContexts
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    TemplateHaskell
+    TypeApplications
+    ViewPatterns
 
 library
-    import:           settings 
-    hs-source-dirs:    src
-    exposed-modules:  GHAppy
+  import:          settings 
+  hs-source-dirs:  src
+  exposed-modules: GHAppy
 
 executable GHAppy
-    import:           settings
-    build-depends:    GHAppy,
-                      optparse-applicative
-    main-is:          Main.hs
-    hs-source-dirs:   app
-    default-language: Haskell2010
+  import:           settings
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  default-language: Haskell2010
+  build-depends:
+    , GHAppy
+    , optparse-applicative
 
 test-suite GHAppy-Tests
-    import:           settings
-    type:             exitcode-stdio-1.0
-    build-depends:    GHAppy,
-                      tasty
-    hs-source-dirs:   test
-    main-is:          Test.hs
+  import:         settings
+  type:           exitcode-stdio-1.0
+  build-depends:
+    , GHAppy
+    , tasty
+
+  hs-source-dirs: test
+  main-is:        Test.hs

@@ -1,7 +1,8 @@
-module Main where 
+module Main where
 
 import Test.Tasty
 
 main :: IO ()
-main = defaultMain 
-  $ testGroup "GHAppy Tests" []
+main =
+  defaultMain $
+    testGroup "GHAppy Tests" []
