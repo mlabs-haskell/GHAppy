@@ -43,6 +43,7 @@ common settings
     ScopedTypeVariables
     TemplateHaskell
     TypeApplications
+    TypeOperators
     ViewPatterns
 
 library

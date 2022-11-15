@@ -1,8 +1,18 @@
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeOperators #-}
-
-module GHAppy where
+module GHAppy (
+  runGHAppy,
+  runCompose,
+  Settings (..),
+  setUpDir,
+  pullIssues,
+  saveAvailableIssues,
+  generatePDF,
+  addAllPagesThat,
+  hasOnlyLabel,
+  hasLabel,
+  addNewPage,
+  addHeader,
+  addFile,
+) where
 
 import Control.Arrow (Arrow (second))
 import Control.Exception (catch, throwIO)
@@ -25,7 +35,7 @@ import Control.Monad.Freer (
 import Control.Monad.Freer.Reader (Reader, ask, asks, runReader)
 import Control.Monad.Freer.State (State, evalState, execState, get, modify, put, runState)
 import Control.Monad.Freer.TH (makeEffect)
-import Control.Monad.Freer.Writer
+import Control.Monad.Freer.Writer (Writer, runWriter, tell)
 import Control.Monad.Writer (unless)
 import Data.Aeson (Value (String))
 import qualified Data.Aeson.KeyMap as Map
@@ -38,29 +48,26 @@ import Data.Aeson.Lens (
  )
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (ByteString)
-import Data.Functor.Contravariant
-import Data.List
+import Data.Functor.Contravariant (Predicate (Predicate), getPredicate)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.String (IsString (fromString))
 import Data.Text (unpack)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import GHC.Generics (Generic)
-import Katip
+
+import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logEnvApp, logMsg, logStr, runKatipT)
+
 import Network.HTTP.Conduit (Request (requestHeaders))
-import Network.HTTP.Simple (
-  getResponseBody,
-  httpBS,
-  parseRequest,
- )
+import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
+
 import System.Directory (createDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 import System.FilePath.Lens (filename)
 import System.IO.Error (isAlreadyExistsError)
 import System.Process.Typed (ExitCode, proc, runProcess)
-import Text.Pandoc.App
-import Unsafe.Coerce (unsafeCoerce)
+
+import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
@@ -118,9 +125,12 @@ makeEffect ''GHAppyAct
 data Composer a where
   -- | Adds the Issue with a specific number to the composer.
   AddFile :: IssueN -> Composer ()
-  -- | Adds an empty page for the
+  -- | Adds an empty page.
   AddNewPage :: Composer ()
+  -- | Adds all the issues that satisfy a predicate, bumping their headers by a
+  -- specific amount.
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
+  -- | Adds a header at specific level.
   AddHeader :: Integer -> String -> Composer ()
 
 makeEffect ''Composer
@@ -166,6 +176,7 @@ runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy 
       SaveAvailableIssues -> log "Saving all Issues." >> saveAllIssues
       GeneratePDF ls -> log "Running Pandoc." >> runPandoc ls
 
+    log :: String -> Eff '[Logger, Reader Settings, State Issues, IO] ()
     log = logS ["runGHAppy"]
 
 runLogger :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Eff (Logger ': effs) a -> Eff effs a
