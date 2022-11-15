@@ -16,6 +16,7 @@ common settings
     , filepath
     , freer-simple
     , http-conduit
+    , katip
     , lens
     , lens-aeson
     , mtl
@@ -42,6 +43,7 @@ common settings
     ScopedTypeVariables
     TemplateHaskell
     TypeApplications
+    TypeOperators
     ViewPatterns
 
 library

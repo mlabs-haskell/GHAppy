@@ -1,13 +1,20 @@
 module GHAppy.OptParser where
 
+import Data.String (fromString)
 import GHAppy
+import Katip
 import Options.Applicative
 import System.FilePath ((<.>), (</>))
+import System.IO (stdout)
 
 gHAppyOpt :: IO Settings
-gHAppyOpt = execParser $ info pSettings fullDesc
+gHAppyOpt = do
+  handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem InfoS) V2
+  mkLogEnv <- registerScribe "stdout" handleScribe defaultScribeSettings =<< initLogEnv "GHAppy" "production"
+  f <- execParser $ info pSettings fullDesc
+  pure $ f mkLogEnv
 
-pSettings :: Parser Settings
+pSettings :: Parser (LogEnv -> Settings)
 pSettings = Settings <$> pApiKey <*> pOutputDirectory <*> pOutputFile <*> pRepository <*> pUserAgent <*> pPandocTemplateUrl <*> pPreambleLocation
   where
     pApiKey = strOption (long "apikey" <> short 'a')
