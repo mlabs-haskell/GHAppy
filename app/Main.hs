@@ -1,15 +1,12 @@
 module Main where
 
-import Control.Monad.Freer
-import Control.Monad.Reader (void)
+import Control.Monad (void)
 import GHAppy
-import OptParser
-import Options.Applicative
-import System.FilePath ((<.>), (</>))
+import GHAppy.OptParser
 
 main :: IO ()
 main = do
-  settings <- execParser $ info pSettings fullDesc
+  settings <- gHAppyOpt
   let runner = runGHAppy settings
   void $
     runner $ do

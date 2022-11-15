@@ -19,6 +19,7 @@ common settings
     , lens
     , lens-aeson
     , mtl
+    , optparse-applicative
     , pandoc
     , text
     , typed-process
@@ -46,16 +47,16 @@ common settings
 library
   import:          settings 
   hs-source-dirs:  src
-  exposed-modules: GHAppy
+  exposed-modules:
+    GHAppy
+    GHAppy.OptParser
 
 executable GHAppy
   import:           settings
   main-is:          Main.hs
   hs-source-dirs:   app
   default-language: Haskell2010
-  build-depends:
-    , GHAppy
-    , optparse-applicative
+  build-depends:    GHAppy
 
 test-suite GHAppy-Tests
   import:         settings

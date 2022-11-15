@@ -1,8 +1,11 @@
-module OptParser where
+module GHAppy.OptParser where
 
 import GHAppy
 import Options.Applicative
 import System.FilePath ((<.>), (</>))
+
+gHAppyOpt :: IO Settings
+gHAppyOpt = execParser $ info pSettings fullDesc
 
 pSettings :: Parser Settings
 pSettings = Settings <$> pApiKey <*> pOutputDirectory <*> pOutputFile <*> pRepository <*> pUserAgent <*> pPandocTemplateUrl <*> pPreambleLocation
