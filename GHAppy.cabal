@@ -16,6 +16,7 @@ common settings
     , filepath
     , freer-simple
     , http-conduit
+    , katip
     , lens
     , lens-aeson
     , mtl

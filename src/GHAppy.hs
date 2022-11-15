@@ -47,6 +47,7 @@ import Data.Text (unpack)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Generics (Generic)
+import Katip
 import Network.HTTP.Conduit (Request (requestHeaders))
 import Network.HTTP.Simple (
   getResponseBody,
@@ -70,8 +71,8 @@ data Settings = Settings
   , userAgent :: String
   , pandocTemplateUrl :: String
   , preambleLocation :: FilePath
+  , logEnvironment :: LogEnv
   }
-  deriving (Show, Eq)
 
 type IssueN = Integer
 
@@ -91,17 +92,29 @@ data Leaf = Leaf
   , level :: Integer
   }
 
+{- | A wrapper around a map of IssueN and Issue. It is used for the in-memory
+ representation of Issues.
+-}
 newtype Issues = Issues {unIssues :: Map IssueN Issue}
   deriving newtype (Monoid, Semigroup)
   deriving (Show, Eq)
 
+-- | Logger is an effect that allows us to log.
+data Logger a where
+  LogS :: [String] -> String -> Logger ()
+
+makeEffect ''Logger
+
+-- | GHAppy API.
 data GHAppyAct a where
   SetUpDir :: GHAppyAct ()
   PullIssues :: GHAppyAct Issues
   SaveAvailableIssues :: GHAppyAct [FilePath]
   GeneratePDF :: [Leaf] -> GHAppyAct ()
+
 makeEffect ''GHAppyAct
 
+-- | API for composing documents from issues.
 data Composer a where
   -- | Adds the Issue with a specific number to the composer.
   AddFile :: IssueN -> Composer ()
@@ -109,6 +122,7 @@ data Composer a where
   AddNewPage :: Composer ()
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
   AddHeader :: Integer -> String -> Composer ()
+
 makeEffect ''Composer
 
 runCompose :: forall effs a. (Member (State Issues) effs) => Eff (Composer ': effs) a -> Eff effs [Leaf]
@@ -137,18 +151,32 @@ hasLabel s = Predicate $ \Issue {..} -> s `elem` labels
 hasOnlyLabel :: String -> Predicate Issue
 hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
 
-runGHAppy :: Settings -> Eff '[GHAppyAct, Reader Settings, State Issues, IO] a -> IO a
-runGHAppy s m = runM (evalState mempty (runReader s (transformGHAppy m)))
+runGHAppy :: Settings -> Eff '[GHAppyAct, Logger, Reader Settings, State Issues, IO] a -> IO a
+runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy m))))
   where
-    transformGHAppy :: Eff '[GHAppyAct, Reader Settings, State Issues, IO] a -> Eff '[Reader Settings, State Issues, IO] a
+    transformGHAppy ::
+      Eff '[GHAppyAct, Logger, Reader Settings, State Issues, IO] a ->
+      Eff '[Logger, Reader Settings, State Issues, IO] a
     transformGHAppy = interpret go
 
-    go :: GHAppyAct a -> Eff '[Reader Settings, State Issues, IO] a
+    go :: GHAppyAct a -> Eff '[Logger, Reader Settings, State Issues, IO] a
     go = \case
-      SetUpDir -> createOutDirectory
-      PullIssues -> pullIssuesImpl
-      SaveAvailableIssues -> saveAllIssues
-      GeneratePDF ls -> runPandoc ls
+      SetUpDir -> log "Setting up Directory." >> createOutDirectory
+      PullIssues -> log "Pulling Issues." >> pullIssuesImpl
+      SaveAvailableIssues -> log "Saving all Issues." >> saveAllIssues
+      GeneratePDF ls -> log "Running Pandoc." >> runPandoc ls
+
+    log = logS ["runGHAppy"]
+
+runLogger :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Eff (Logger ': effs) a -> Eff effs a
+runLogger = interpret go
+  where
+    go :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Logger a -> Eff effs a
+    go = \case
+      LogS env msg -> do
+        lEnv <- asks logEnvironment
+        let env' = lEnv ^. logEnvApp
+        sendM $ runKatipT lEnv $ logMsg (Namespace $ fromString <$> env) InfoS (logStr msg)
 
 createOutDirectory :: Members '[Reader Settings, IO] fs => Eff fs ()
 createOutDirectory = do
