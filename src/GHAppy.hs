@@ -53,7 +53,7 @@ import Network.HTTP.Simple (
   httpBS,
   parseRequest,
  )
-import System.Directory (createDirectory)
+import System.Directory (createDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 import System.FilePath.Lens (filename)
 import System.IO.Error (isAlreadyExistsError)
@@ -249,19 +249,20 @@ runPandoc fs = do
   pTplFl <- getPandocTemplateLocation
   savePandocTemplate
   preamble <- getPreamble
-  let tmpFile = "." </> outputDirectory </> "tmp" <.> "md"
+  let mdFile = "." </> outputDirectory </> outputFile <.> "md"
   let outFileP = "." </> outputDirectory </> outputFile <.> "pdf"
   outContent <- (preamble <>) . unlines <$> traverse leafToMDPP fs
-  sendM $ writeFile tmpFile outContent
+  sendM $ writeFile mdFile outContent
   sendM $
     convertWithOpts $
       defaultOpts
         { optFrom = Just $ fromString "markdown"
         , optTo = Just $ fromString "pdf"
         , optOutputFile = Just outFileP
-        , optInputFiles = Just [tmpFile]
+        , optInputFiles = Just [mdFile]
         , optTemplate = Just pTplFl
         }
+  sendM $ removeFile pTplFl
 
 getPreamble :: (Members '[Reader Settings] fs, LastMember IO fs) => Eff fs String
 getPreamble = asks preambleLocation >>= sendM . readFile >>= \c -> pure . unlines $ ["---", c, "---"]
