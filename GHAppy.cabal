@@ -27,6 +27,7 @@ common settings
     , vector
 
   default-extensions:
+    ConstraintKinds
     DataKinds
     DeriveAnyClass
     DeriveFoldable
