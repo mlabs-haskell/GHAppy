@@ -9,6 +9,7 @@ module GHAppy (
   addAllPagesThat,
   hasOnlyLabel,
   hasLabel,
+  isOpen,
   addNewPage,
   addHeader,
   addFile,
@@ -51,6 +52,7 @@ import Data.Aeson.Lens (
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as B8
 import Data.ByteString.Internal (ByteString)
+import Data.Char (isDigit)
 import Data.Functor.Contravariant (Predicate (Predicate), getPredicate)
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -86,12 +88,16 @@ data Settings = Settings
 
 type IssueN = Integer
 
+data Status = Open | Closed
+  deriving (Show, Eq)
+
 -- | Issue is the standard document GHAppy works with.
 data Issue = Issue
   { content :: String
   , number :: Integer
   , title :: String
   , labels :: [String]
+  , status :: Status
   }
   deriving (Show, Eq)
 
@@ -176,6 +182,10 @@ compose = reinterpret go
 -- | Predicate for issues that have a specific label.
 hasLabel :: String -> Predicate Issue
 hasLabel s = Predicate $ \Issue {..} -> s `elem` labels
+
+-- | Predicate for open issue.
+isOpen :: Predicate Issue
+isOpen = Predicate $ \Issue {..} -> status == Open
 
 -- | Predicate for issues that have only a specific label.
 hasOnlyLabel :: String -> Predicate Issue
@@ -277,12 +287,13 @@ pullIssuesImpl = do
     pure $ fmap (V.toList . fmap mconcat) (fmap (\ls -> ls ^.. key "name" . _String . to unpack) <$> labels)
 
   issues <- do
+    let f x = case x of "open" -> Open; "closed" -> Closed
     let issueBodies = unpack <$> response ^.. values . key "body" . _String
+    let statuses = f . unpack <$> response ^.. values . key "state" . _String
     let issueTitles = unpack <$> response ^.. values . key "title" . _String
     let issueNumbers = response ^.. values . key "number" . _Integer
-    let ks = zip (zip3 issueNumbers issueTitles issueBodies) labels
-    pure $ (\((n, t, b), l) -> (n, Issue {content = b, number = n, title = t, labels = l})) <$> ks
-
+    let ks = zip (zip (zip3 issueNumbers issueTitles issueBodies) labels) statuses
+    pure $ (\(((n, t, b), l), s) -> (n, Issue {content = b, number = n, title = t, labels = l, status = s})) <$> ks
   modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
   get
 
@@ -294,9 +305,38 @@ leafToMDPP Leaf {..} = do
       pure mempty
     Just no -> do
       let content = unlines preamble <> formatIssue (s M.! no)
-      pure $ bumpHeaders level content
+      let bumpedContent = bumpHeaders level content
+      replaceNumbers bumpedContent
+
   let bumpedPreamble = bumpHeaders level $ unlines preamble
   pure $ bumpedPreamble <> formattedContent
+
+-- | Replace issue numbers with title of the issue.
+replaceNumbers :: forall effs. Member (State Issues) effs => String -> Eff effs String
+replaceNumbers = \case
+  '#' : xs -> do
+    db <- unIssues <$> get
+    case slurpNumber xs of
+      Just (no, after) -> do
+        let issueTitle = title $ db M.! no
+        (("_" <> issueTitle <> "_") <>) <$> replaceNumbers after
+      Nothing -> ('#' :) <$> replaceNumbers xs
+  x : xs -> (x :) <$> replaceNumbers xs
+  [] -> pure []
+  where
+    slurpNumber :: String -> Maybe (Integer, String)
+    slurpNumber str = do
+      let n = takeWhile isDigit str
+      let l = length n
+      ( if l > 0
+          then
+            ( do
+                let after = drop l str
+                let no = read @Integer n
+                Just (no, after)
+            )
+          else Nothing
+        )
 
 bumpHeaders :: Integer -> String -> String
 bumpHeaders l xs = do

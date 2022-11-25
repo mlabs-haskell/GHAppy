@@ -14,11 +14,24 @@ main = do
       pullIssues
       fs' <- runCompose $ do
         addDisclaimer
+
         addHeader 1 "Contents"
-        addAllPagesThat 1 (hasLabel "audit" <> hasLabel "audit-meta")
+        addAllPagesThat 1 (hasLabel "audit" <> hasLabel "audit-meta" <> isOpen)
         addNewPage
-        addHeader 1 "Findings"
-        addAllPagesThat 1 (hasOnlyLabel "audit")
+
+        addHeader 1 "Reviews"
+        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "audit-meta" <> isOpen)
+
+        addHeader 2 "Not Considered Fixed"
+        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "not-fixed" <> isOpen)
+
+        addHeader 2 "Considered Fixed"
+        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "fixed" <> isOpen)
+
+        addHeader 2 "Recommendations"
+        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "recommendation" <> isOpen)
+
         addHeader 1 "Appendix"
         addVulnTypes
+
       generatePDF fs'
