@@ -53,6 +53,7 @@ library
   exposed-modules:
     GHAppy
     GHAppy.OptParser
+    GHAppy.Types
 
 executable GHAppy
   import:           settings

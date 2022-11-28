@@ -15,6 +15,7 @@ module GHAppy (
   addFile,
   addDisclaimer,
   addVulnTypes,
+  Leaf (..),
 ) where
 
 import Control.Arrow (Arrow (second))
@@ -40,7 +41,7 @@ import Control.Monad.Freer.State (State, evalState, execState, get, modify, put,
 import Control.Monad.Freer.TH (makeEffect)
 import Control.Monad.Freer.Writer (Writer, runWriter, tell)
 import Control.Monad.Writer (unless)
-import Data.Aeson (Value (String))
+import Data.Aeson --(Value (String), decode)
 import qualified Data.Aeson.KeyMap as Map
 import Data.Aeson.Lens (
   AsNumber (_Integer),
@@ -52,6 +53,7 @@ import Data.Aeson.Lens (
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as B8
 import Data.ByteString.Internal (ByteString)
+import qualified Data.ByteString.Lazy.Internal as LB
 import Data.Char (isDigit)
 import Data.Functor.Contravariant (Predicate (Predicate), getPredicate)
 import Data.Map (Map)
@@ -63,7 +65,9 @@ import qualified Data.Vector as V
 
 import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logEnvApp, logMsg, logStr, runKatipT)
 
-import Network.HTTP.Conduit (Request (requestHeaders))
+import Data.Maybe (fromMaybe)
+
+import Network.HTTP.Conduit (Request (requestHeaders), setQueryString)
 import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
 
 import System.Directory (createDirectory, removeFile)
@@ -71,6 +75,8 @@ import System.FilePath ((<.>), (</>))
 import System.FilePath.Lens (filename)
 import System.IO.Error (isAlreadyExistsError)
 import System.Process.Typed (ExitCode, proc, runProcess)
+
+import qualified GHAppy.Types as T
 
 import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
@@ -107,6 +113,7 @@ data Leaf = Leaf
   , preamble :: [String]
   , level :: Integer
   }
+  deriving (Show, Eq)
 
 {- | A wrapper around a map of IssueN and Issue. It is used for the in-memory
  representation of Issues.
@@ -133,7 +140,7 @@ makeEffect ''GHAppyAct
 -- | API for composing documents from issues.
 data Composer a where
   -- | Adds the Issue with a specific number to the composer.
-  AddFile :: IssueN -> Composer ()
+  AddFile :: Integer -> IssueN -> Composer ()
   -- | Adds an empty page.
   AddNewPage :: Composer ()
   -- | Adds all the issues that satisfy a predicate, bumping their headers by a
@@ -165,7 +172,7 @@ compose = reinterpret go
   where
     go :: forall effs a. EffGH effs => Composer a -> Eff (Writer [Leaf] ': effs) a
     go = \case
-      AddFile no -> tell [emptyLeaf {issueN = Just no}]
+      AddFile lvl no -> tell [emptyLeaf {issueN = Just no, level = lvl}]
       AddNewPage -> tell [emptyLeaf {preamble = ["\\newpage"]}]
       AddAllPagesThat lvl p ->
         let f = fmap ((\n -> emptyLeaf {issueN = n, level = lvl}) . Just . fst) . M.toList . M.filter (getPredicate p) . unIssues
@@ -280,22 +287,37 @@ pullIssuesImpl = do
                 , ("User-Agent", fromString userAgent)
                 ]
             }
-    getResponseBody <$> httpBS reqIssues
+    -- fixme: pagination is no handled - if you don't see the issue you are
+    -- looking for, this needs to be fixed.
+    let reqIssues' =
+          setQueryString
+            [ ("per_page", Just "100")
+            , ("filter", Just "all")
+            , ("state", Just "all")
+            , ("direction", Just "asc")
+            , ("page", Just "1")
+            , ("labels", Just "audit")
+            ]
+            reqIssues
+    getResponseBody <$> httpBS reqIssues'
 
-  labels <- do
-    let labels = response ^.. values . key "labels" . _Array
-    pure $ fmap (V.toList . fmap mconcat) (fmap (\ls -> ls ^.. key "name" . _String . to unpack) <$> labels)
-
-  issues <- do
-    let f x = case x of "open" -> Open; "closed" -> Closed
-    let issueBodies = unpack <$> response ^.. values . key "body" . _String
-    let statuses = f . unpack <$> response ^.. values . key "state" . _String
-    let issueTitles = unpack <$> response ^.. values . key "title" . _String
-    let issueNumbers = response ^.. values . key "number" . _Integer
-    let ks = zip (zip (zip3 issueNumbers issueTitles issueBodies) labels) statuses
-    pure $ (\(((n, t, b), l), s) -> (n, Issue {content = b, number = n, title = t, labels = l, status = s})) <$> ks
-  modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
-  get
+  case (decode @[T.Entry]) $ LB.packBytes $ BS.unpack response of
+    Nothing -> error "Cannot decode"
+    Just entries -> do
+      let issues = fmap toIssue entries
+      modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
+      get
+  where
+    toIssue entry =
+      ( T.number entry
+      , Issue
+          { title = unpack $ T.title entry
+          , content = unpack $ fromMaybe "" $ T.body entry
+          , labels = (\(T.Label x) -> x) <$> T.labels entry
+          , number = T.number entry
+          , status = (\case "open" -> Open; _ -> Closed) $ T.state entry
+          }
+      )
 
 leafToMDPP :: forall effs. Member (State Issues) effs => Leaf -> Eff effs String
 leafToMDPP Leaf {..} = do
