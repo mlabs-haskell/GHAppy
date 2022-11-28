@@ -12,26 +12,30 @@ main = do
     runner $ do
       setUpDir
       pullIssues
-      fs' <- runCompose $ do
-        addDisclaimer
+      s <- runCompose auditReport
+      generatePDF s
 
-        addHeader 1 "Contents"
-        addAllPagesThat 1 (hasLabel "audit" <> hasLabel "audit-meta" <> isOpen)
-        addNewPage
+auditReport = do
+  addDisclaimer
 
-        addHeader 1 "Reviews"
-        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "audit-meta" <> isOpen)
+  addHeader 1 "Contents"
+  addFile 1 1
+  addFile 1 6
+  addNewPage
 
-        addHeader 2 "Not Considered Fixed"
-        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "not-fixed" <> isOpen)
+  addHeader 1 "Reviews"
 
-        addHeader 2 "Considered Fixed"
-        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "fixed" <> isOpen)
+  addHeader 2 "Not Considered Fixed"
+  addAllPagesThat 2 $ hasLabel "audit" <> hasLabel "not-fixed" <> isOpen
+  addNewPage
 
-        addHeader 2 "Recommendations"
-        addAllPagesThat 2 (hasLabel "audit" <> hasLabel "recommendation" <> isOpen)
+  addHeader 2 "Considered Fixed"
+  addAllPagesThat 2 $ hasLabel "audit" <> hasLabel "fixed" <> isOpen
+  addNewPage
 
-        addHeader 1 "Appendix"
-        addVulnTypes
+  addHeader 2 "Recommendations"
+  addAllPagesThat 2 $ hasLabel "audit" <> hasLabel "recommendation" <> isOpen
+  addNewPage
 
-      generatePDF fs'
+  addHeader 1 "Appendix"
+  addVulnTypes
