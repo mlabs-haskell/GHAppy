@@ -1,6 +1,7 @@
-module Main where
+module Main (main, auditReport) where
 
 import Control.Monad (void)
+import Control.Monad.Freer
 import GHAppy
 import GHAppy.OptParser
 
@@ -17,6 +18,7 @@ main = do
       generatePDF s
 
 -- | Example Audit report structure.
+auditReport :: (Member Composer effs) => Eff effs ()
 auditReport = do
   addDisclaimer
 

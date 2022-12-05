@@ -2,7 +2,7 @@ cabal-version:      2.4
 name:               GHAppy
 version:            0.1.0.0
 author:             Vlad P. Luchian
-maintainer:         cstmlcodes@gmail.com
+maintainer:         vlad@mlabs.city
 extra-source-files:
   CHANGELOG.md
   README.md
@@ -16,7 +16,6 @@ common settings
     , base
     , bytestring
     , containers
-    , data-default
     , directory
     , filepath
     , freer-simple
@@ -28,8 +27,6 @@ common settings
     , optparse-applicative
     , pandoc
     , text
-    , typed-process
-    , vector
 
   default-extensions:
     ConstraintKinds
