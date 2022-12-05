@@ -3,7 +3,12 @@ name:               GHAppy
 version:            0.1.0.0
 author:             Vlad P. Luchian
 maintainer:         cstmlcodes@gmail.com
-extra-source-files: CHANGELOG.md
+extra-source-files:
+  CHANGELOG.md
+  README.md
+
+description:
+  GHAppy stands for GitHub API Processor, and is a small utility library used for easily composing and creating Audit Reports.
 
 common settings
   build-depends:
@@ -47,6 +52,15 @@ common settings
     TypeOperators
     ViewPatterns
 
+  default-language:   Haskell2010
+  ghc-options:
+    -Wall -Wcompat -Wincomplete-uni-patterns -Wno-unused-do-bind
+    -Wno-partial-type-signatures -Wmissing-export-lists -Werror
+    -Wincomplete-record-updates -Wmissing-deriving-strategies
+    -Wno-name-shadowing -Wunused-foralls
+    -Wno-unticked-promoted-constructors -fprint-explicit-foralls
+    -fprint-explicit-kinds
+
 library
   import:          settings 
   hs-source-dirs:  src
@@ -56,11 +70,10 @@ library
     GHAppy.Types
 
 executable GHAppy
-  import:           settings
-  main-is:          Main.hs
-  hs-source-dirs:   app
-  default-language: Haskell2010
-  build-depends:    GHAppy
+  import:         settings
+  main-is:        Main.hs
+  hs-source-dirs: app
+  build-depends:  GHAppy
 
 test-suite GHAppy-Tests
   import:         settings
