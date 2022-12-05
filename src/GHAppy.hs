@@ -1,57 +1,73 @@
 module GHAppy (
+  -- * Running GHAppy.
+
+  -- | GHAppy is meant to be easy to work with, and these two functions together with the exposed API should be
+  -- all you need to come up with a nice report. To see an example of it in action, please refer to 'src/Main.hs'.
   runGHAppy,
   runCompose,
+
+  -- * The parameters of GHAppy.
   Settings (..),
+
+  -- * GHAppy Effect, and Effect Stacks.
+  GHStack,
+  Logger (..),
+  GHAppyAct (..),
+  Composer (..),
+  Issue,
+  EffGH,
+
+  -- * GHappy specific types.
+  Issues,
+  IssueN,
+  Leaf (..),
+
+  -- * GHAppy's logistical API.
   setUpDir,
   pullIssues,
   saveAvailableIssues,
   generatePDF,
+
+  -- * Composer specific API.
   addAllPagesThat,
-  hasOnlyLabel,
-  hasLabel,
-  isOpen,
   addNewPage,
   addHeader,
   addFile,
   addDisclaimer,
   addVulnTypes,
-  Leaf (..),
+
+  -- * GHAppy predicates.
+
+  -- | 'Predicate's are an easy way to create filters for the issues you would want to include in the report.
+  -- It is the recommended way to batch the retrieval and inclusion of 'Issue's, rather than the inclusion by
+  -- number. The concatenation 'Predicate's provides an intuitive way of composing them.
+  hasOnlyLabel,
+  hasLabel,
+  isOpen,
+
+  -- * Logger API.
+  logS,
 ) where
 
-import Control.Arrow (Arrow (second))
 import Control.Exception (catch, throwIO)
-import Control.Lens hiding ((<.>))
-import Control.Lens.Internal.Coerce (coerce)
 import Control.Monad.Freer (
   Eff,
   LastMember,
   Member,
   Members,
   interpret,
-  raise,
   reinterpret,
-  reinterpret3,
   runM,
   send,
   sendM,
-  translate,
  )
 import Control.Monad.Freer.Reader (Reader, ask, asks, runReader)
-import Control.Monad.Freer.State (State, evalState, execState, get, modify, put, runState)
+import Control.Monad.Freer.State (State, evalState, get, modify)
 import Control.Monad.Freer.TH (makeEffect)
 import Control.Monad.Freer.Writer (Writer, runWriter, tell)
 import Control.Monad.Writer (unless)
-import Data.Aeson --(Value (String), decode)
-import qualified Data.Aeson.KeyMap as Map
-import Data.Aeson.Lens (
-  AsNumber (_Integer),
-  AsPrimitive (_String),
-  AsValue (_Array, _Object),
-  key,
-  values,
- )
+import Data.Aeson
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as B8
 import Data.ByteString.Internal (ByteString)
 import qualified Data.ByteString.Lazy.Internal as LB
 import Data.Char (isDigit)
@@ -60,10 +76,9 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.String (IsString (fromString))
 import Data.Text (unpack)
-import Data.Vector (Vector)
-import qualified Data.Vector as V
+import qualified Data.Text.Encoding as ENC
 
-import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logEnvApp, logMsg, logStr, runKatipT)
+import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, runKatipT)
 
 import Data.Maybe (fromMaybe)
 
@@ -72,9 +87,7 @@ import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
 
 import System.Directory (createDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
-import System.FilePath.Lens (filename)
 import System.IO.Error (isAlreadyExistsError)
-import System.Process.Typed (ExitCode, proc, runProcess)
 
 import qualified GHAppy.Types as T
 
@@ -92,12 +105,13 @@ data Settings = Settings
   , logEnvironment :: LogEnv
   }
 
+-- | The number of an Issue, as found on GitHub.
 type IssueN = Integer
 
 data Status = Open | Closed
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
--- | Issue is the standard document GHAppy works with.
+-- | Issue is the standard document GHAppy works with. It is a simpler version of `Entry` and the reasoning behind decoupling the two is both a matter of history and convenience. In future versions this could be replaced with Entry directly.
 data Issue = Issue
   { content :: String
   , number :: Integer
@@ -105,34 +119,52 @@ data Issue = Issue
   , labels :: [String]
   , status :: Status
   }
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
--- | Leaf is used in composition as an element of the final output.
+-- | A 'Leaf' is to compose the final output.
 data Leaf = Leaf
-  { issueN :: Maybe IssueN
-  , preamble :: [String]
-  , level :: Integer
+  { -- | Leafs can contain an 'IssueN' - in which case the content of the 'Issue' is included in
+    -- the final output. Alternatively they can simply be in-place text, in which case only
+    -- the 'Leaf''s 'preamble' is included.
+    issueN :: Maybe IssueN
+  , -- | The Preamble is prepended to an included leaf. We use this to either prepend some custom
+    -- text to an issue, or to create a non issue entry.
+    preamble :: [String]
+  , -- | The level of a leaf represents by how many levels we will bump the headers it contains.
+    -- '0' means none.
+    level :: Integer
   }
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 {- | A wrapper around a map of IssueN and Issue. It is used for the in-memory
  representation of Issues.
 -}
 newtype Issues = Issues {unIssues :: Map IssueN Issue}
   deriving newtype (Monoid, Semigroup)
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
--- | Logger is an effect that allows us to log.
+-- | Logger is an 'Eff' that allows us to log, in the default implementation Katip is used for structured logging.
 data Logger a where
-  LogS :: [String] -> String -> Logger ()
+  -- | Standard Info Log.
+  LogS ::
+    -- | Log Environment
+    [String] ->
+    -- | Log Message
+    String ->
+    -- | Log Effect
+    Logger ()
 
 makeEffect ''Logger
 
 -- | GHAppy API.
 data GHAppyAct a where
+  -- | Creates a directory as specified by 'Settings'.
   SetUpDir :: GHAppyAct ()
+  -- | Pulls all the Issues from the repository specified in 'Settings', and keeps them in memory.
   PullIssues :: GHAppyAct Issues
+  -- | Dumps all the issues from memory into a specific folder.
   SaveAvailableIssues :: GHAppyAct [FilePath]
+  -- | Uses Pandoc to generate the final report.
   GeneratePDF :: [Leaf] -> GHAppyAct ()
 
 makeEffect ''GHAppyAct
@@ -155,10 +187,10 @@ data Composer a where
 
 makeEffect ''Composer
 
--- | The usual Effect Stack for the Monad.
+-- | The usual 'Eff' Stack for GHAppy.
 type GHStack = '[Logger, Reader Settings, State Issues, IO]
 
--- | A constraint that includes the GHSTack and IO as the last Effect.
+-- | A constraint that includes the 'GHSTack' and has 'IO' as the last 'Eff'.
 type EffGH a = (Members GHStack a, LastMember IO a)
 
 runCompose :: forall effs a. EffGH effs => Eff (Composer ': effs) a -> Eff effs [Leaf]
@@ -206,13 +238,13 @@ runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy 
 
     go :: GHAppyAct a -> Eff GHStack a
     go = \case
-      SetUpDir -> log "Setting up Directory." >> createOutDirectory
-      PullIssues -> log "Pulling Issues." >> pullIssuesImpl
-      SaveAvailableIssues -> log "Saving all Issues." >> saveAllIssues
-      GeneratePDF ls -> log "Running Pandoc." >> runPandoc ls
+      SetUpDir -> log "SetUpDir" "Setting up Directory." >> createOutDirectory
+      PullIssues -> log "PullIssues" "Pulling Issues from GitHub." >> pullIssuesImpl
+      SaveAvailableIssues -> log "SaveAvailableIssues" "Saving all Issues to output directory." >> saveAllIssues
+      GeneratePDF ls -> log "GeneratePDF" "Running Pandoc." >> runPandoc ls
 
-    log :: String -> Eff GHStack ()
-    log = logS ["runGHAppy"]
+    log :: String -> String -> Eff GHStack ()
+    log s = logS ["runGHAppy", s]
 
 runLogger :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Eff (Logger ': effs) a -> Eff effs a
 runLogger = interpret go
@@ -221,7 +253,6 @@ runLogger = interpret go
     go = \case
       LogS env msg -> do
         lEnv <- asks logEnvironment
-        let env' = lEnv ^. logEnvApp
         sendM $ runKatipT lEnv $ logMsg (Namespace $ fromString <$> env) InfoS (logStr msg)
 
 createOutDirectory :: Members '[Reader Settings, IO] effs => Eff effs ()
@@ -236,84 +267,79 @@ filePath i@Issue {..} = do
 
 -- | GHAppy saves the issue to the `outputDirectory`.
 saveIssue :: Members '[Reader Settings, IO] effs => Issue -> Eff effs FilePath
-saveIssue i@Issue {..} = do
+saveIssue i = do
   let ticketContent = formatIssue i
   fileName <- fst <$> filePath i
   send $ writeFile fileName ticketContent
   return fileName
 
 formatIssue :: Issue -> String
-formatIssue i@Issue {..} = "# " <> title <> "\n\n" <> bumpHeaders 1 content <> "\n"
+formatIssue Issue {..} = "# " <> title <> "\n\n" <> bumpHeaders 1 content <> "\n"
 
 -- | Saves all the issues available.
 saveAllIssues :: Members '[Reader Settings, State Issues, IO] effs => Eff effs [FilePath]
 saveAllIssues = get >>= fmap M.elems . traverse saveIssue . unIssues
 
--- | Makes a GET requests and returns the body as String.
+-- | Makes a GET requests and returns the body as String. The encoding of the ByteString must be UTF8.
 makeRequest :: LastMember IO eff => String -> Eff eff String
 makeRequest url = do
   response <- sendM $ do
     initReq <- parseRequest url
     getResponseBody <$> httpBS initReq
-  let str = repairStr . B8.unpack $ response
-  return str
-  where
-    -- UTF8 characters get broken badly by the B8.unpack
-    -- All fixed in-place here.
-    repairStr = \case
-      ('\226' : '\128' : '\153' : xs) -> repairStr $ '\'' : xs
-      ('\226' : '\128' : '\152' : xs) -> repairStr $ '"' : xs
-      ('\226' : '\128' : '\156' : xs) -> repairStr $ '"' : xs
-      ('\226' : '\128' : '\157' : xs) -> repairStr $ '"' : xs
-      ('\226' : '\134' : '\144' : xs) -> repairStr $ '←' : xs
-      ('\226' : '\128' : '\166' : xs) -> repairStr $ '…' : xs
-      (x : xs) -> x : repairStr xs
-      [] -> []
+  return $ either (error . show) unpack . ENC.decodeUtf8' $ response
 
 -- | GHAppy pulls all the issues from the GitHub repository.
 pullIssuesImpl :: forall effs. EffGH effs => Eff effs Issues
-pullIssuesImpl = do
-  Settings {..} <- ask
-
-  response <- sendM $ do
-    -- Initialise requests
-    initReq <- parseRequest $ "https://api.github.com/repos/" <> repository <> "/issues"
-    -- Add headers
-    let reqIssues =
-          initReq
-            { requestHeaders =
-                [ ("Accept", "application/vnd.github+json")
-                , ("Authorization", fromString $ "Bearer " <> apiKey)
-                , ("User-Agent", fromString userAgent)
-                ]
-            }
-    -- fixme: pagination is no handled - if you don't see the issue you are
-    -- looking for, this needs to be fixed.
-    let reqIssues' =
-          setQueryString
-            [ ("per_page", Just "100")
-            , ("filter", Just "all")
-            , ("state", Just "all")
-            , ("direction", Just "asc")
-            , ("page", Just "1")
-            , ("labels", Just "audit")
-            ]
-            reqIssues
-    getResponseBody <$> httpBS reqIssues'
-
-  case (decode @[T.Entry]) $ LB.packBytes $ BS.unpack response of
-    Nothing -> error "Cannot decode"
-    Just entries -> do
-      let issues = fmap toIssue entries
-      modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
-      get
+pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
   where
+    -- Utility function that allows us to pull all the pages.
+    goFromUntil :: forall a m. Monad m => Int -> (a -> Bool) -> (Int -> m a) -> m a
+    goFromUntil n p m = m n >>= \r -> if p r then pure r else goFromUntil (n + 1) p m
+
+    -- Pulls page 'n' with 100 issues.
+    pullPage :: forall effs. EffGH effs => Int -> Eff effs Issues
+    pullPage n = do
+      logS ["runGHAppy", "pullPage"] $ "Pulling issues from page " <> show n <> "."
+      Settings {..} <- ask
+
+      response <- sendM $ do
+        -- Initialise requests
+        initReq <- parseRequest $ "https://api.github.com/repos/" <> repository <> "/issues"
+        -- Add headers
+        let reqIssues =
+              initReq
+                { requestHeaders =
+                    [ ("Accept", "application/vnd.github+json")
+                    , ("Authorization", fromString $ "Bearer " <> apiKey)
+                    , ("User-Agent", fromString userAgent)
+                    ]
+                }
+
+        let reqIssues' =
+              setQueryString
+                [ ("per_page", Just "100")
+                , ("filter", Just "all")
+                , ("state", Just "all")
+                , ("direction", Just "asc")
+                , ("page", Just $ fromString $ show n)
+                , ("labels", Just "audit")
+                ]
+                reqIssues
+        getResponseBody <$> httpBS reqIssues'
+
+      case (decode @[T.Entry]) $ LB.packBytes $ BS.unpack response of
+        Nothing -> error "Cannot decode body! Something has gone fundamentally wrong."
+        Just entries -> do
+          let issues = fmap toIssue entries
+          modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
+          pure $ Issues $ M.fromList issues
+
     toIssue entry =
       ( T.number entry
       , Issue
           { title = unpack $ T.title entry
           , content = unpack $ fromMaybe "" $ T.body entry
-          , labels = (\(T.Label x) -> x) <$> T.labels entry
+          , labels = (\(T.Label x) -> unpack x) <$> T.labels entry
           , number = T.number entry
           , status = (\case "open" -> Open; _ -> Closed) $ T.state entry
           }
@@ -403,7 +429,6 @@ getPandocTemplate = do
 
 savePandocTemplate :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs ()
 savePandocTemplate = do
-  outDir <- asks outputDirectory
   content <- getPandocTemplate
   pTplFl <- getPandocTemplateLocation
   sendM $ BS.writeFile pTplFl content

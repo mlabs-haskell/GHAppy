@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+
 module GHAppy.Types where
 
 import Data.Aeson
@@ -17,13 +19,16 @@ import GHC.Generics
 -- instance FromJSON User
 -- instance ToJSON User
 
+-- | Labels (in addition to issue numbers) are the main way of filtering and selecting issues to be included in the final report.
 newtype Label = Label
-  { name :: String
+  { name :: Text
   }
-  deriving (Show, Eq, Generic)
+  deriving stock (Show, Eq, Generic)
+
 instance FromJSON Label
 instance ToJSON Label
 
+-- | An Entry is a GH Issue. We do not require all the information for the purpose of GHAppy, rather only a subset.
 data Entry = Entry
   { --url :: Text
     -- , repository_url :: !Text
@@ -54,6 +59,7 @@ data Entry = Entry
     -- , performed_via_github_app :: Maybe Text
     -- , state_reason :: Maybe Text
   }
-  deriving (Show, Eq, Generic)
+  deriving stock (Show, Eq, Generic)
+
 instance FromJSON Entry
 instance ToJSON Entry

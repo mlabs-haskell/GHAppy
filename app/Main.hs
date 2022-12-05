@@ -4,6 +4,7 @@ import Control.Monad (void)
 import GHAppy
 import GHAppy.OptParser
 
+-- | Example of a main file for running GHAppy.
 main :: IO ()
 main = do
   settings <- gHAppyOpt
@@ -15,6 +16,7 @@ main = do
       s <- runCompose auditReport
       generatePDF s
 
+-- | Example Audit report structure.
 auditReport = do
   addDisclaimer
 

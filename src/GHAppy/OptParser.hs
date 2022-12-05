@@ -1,12 +1,12 @@
-module GHAppy.OptParser where
+module GHAppy.OptParser (gHAppyOpt, pSettings) where
 
-import Data.String (fromString)
 import GHAppy
 import Katip
 import Options.Applicative
 import System.FilePath ((<.>), (</>))
 import System.IO (stdout)
 
+-- | Retrieves the Settings and initialises the Logger to output to stdout.
 gHAppyOpt :: IO Settings
 gHAppyOpt = do
   handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem InfoS) V2
@@ -14,6 +14,7 @@ gHAppyOpt = do
   f <- execParser $ info pSettings fullDesc
   pure $ f mkLogEnv
 
+-- | An OptParser for the standard GHAppy settings. In most cases you will want to use 'gHAppyOpt'.
 pSettings :: Parser (LogEnv -> Settings)
 pSettings = Settings <$> pApiKey <*> pOutputDirectory <*> pOutputFile <*> pRepository <*> pUserAgent <*> pPandocTemplateUrl <*> pPreambleLocation
   where
