@@ -1,9 +1,9 @@
-module Main (main, auditReport) where
+module Main (main) where
 
 import Control.Monad (void)
-import Control.Monad.Freer
+import Control.Monad.Freer (Eff, Member)
 import GHAppy
-import GHAppy.OptParser
+import GHAppy.OptParser (gHAppyOpt)
 
 -- | Example of a main file for running GHAppy.
 main :: IO ()
