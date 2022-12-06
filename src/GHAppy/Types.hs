@@ -28,7 +28,7 @@ newtype Label = Label
 instance FromJSON Label
 instance ToJSON Label
 
--- | An Entry is a GH Issue. We do not require all the information for the purpose of GHAppy, rather only a subset.
+-- | An Entry is a GH Issue. We do not require all the information for the purpose of GHAppy, but rather only a subset of it (for time being).
 data Entry = Entry
   { --url :: Text
     -- , repository_url :: !Text
@@ -42,7 +42,7 @@ data Entry = Entry
   , title :: Text
   , -- , user :: Object
     labels :: [Label]
-  , state :: String
+  , state :: Text
   , -- , locked :: Bool
     -- , assignee :: Text
     -- , assignees :: [Object]

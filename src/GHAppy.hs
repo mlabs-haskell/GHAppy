@@ -12,9 +12,10 @@ __Example:__
 module Main (main) where
 
 import Control.Monad (void)
-import Control.Monad.Freer (Member, Eff)
-import GHAppy.OptParser (gHAppyOpt)
+import Control.Monad.Freer (Eff, Member)
 import GHAppy
+import GHAppy.OptParser (gHAppyOpt)
+import System.FilePath ((<.>))
 
 -- | Example of a main file for running GHAppy.
 main :: IO ()
@@ -23,15 +24,29 @@ main = do
   let runner = runGHAppy settings
   void $
     runner $ do
-      setUpDir
+      -- Set up necessary directories
+      setUpDirs
+
+      -- Download additional images required.
+      let logo = \"MLabs-logo-cropped\" <.> \"jpg\"
+      let logoCropped = \"MLabs-logo\" <.> \"jpg\"
+      let linkedFiles = \"https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/\"
+      getLinkedFile ImagesDir logo (linkedFiles <> logo)
+      getLinkedFile ImagesDir logoCropped (linkedFiles <> logoCropped)
+
+      -- Download all the issues
       pullIssues
+
+      -- Compose our report
       s <- runCompose auditReport
+
+      -- Generate our pdf.
       generatePDF s
 
 -- | Example Audit report structure.
 auditReport :: (Member Composer effs) => Eff effs ()
 auditReport = do
-  addDisclaimer
+  addRawMd 0 \"https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md\"
 
   addHeader 1 \"Contents\"
   addFile 1 1
@@ -40,20 +55,20 @@ auditReport = do
 
   addHeader 1 \"Reviews\"
 
-  addHeader 2 \"Not Considered Fixed"
+  addHeader 2 \"Not Considered Fixed\"
   addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"not-fixed\" <> isOpen
   addNewPage
 
-  addHeader 2 \"Considered Fixed"
+  addHeader 2 \"Considered Fixed\"
   addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"fixed\" <> isOpen
   addNewPage
 
-  addHeader 2 \"Recommendations"
+  addHeader 2 \"Recommendations\"
   addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"recommendation\" <> isOpen
   addNewPage
 
   addHeader 1 \"Appendix\"
-  addVulnTypes
+  addRawMd 1 \"https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/vulnerability-types.md\"
 
 @
 
@@ -85,20 +100,21 @@ module GHAppy (
   Issues,
   IssueN,
   Leaf (..),
+  Location (..),
 
   -- * GHAppy's logistical API.
-  setUpDir,
+  setUpDirs,
   pullIssues,
   saveAvailableIssues,
   generatePDF,
+  getLinkedFile,
 
   -- * Composer specific API.
   addAllPagesThat,
   addNewPage,
   addHeader,
   addFile,
-  addDisclaimer,
-  addVulnTypes,
+  addRawMd,
 
   -- * GHAppy predicates.
 
@@ -146,6 +162,7 @@ import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, r
 
 import Data.Maybe (fromMaybe)
 
+import qualified Data.ByteString as B
 import Network.HTTP.Conduit (Request (requestHeaders), setQueryString)
 import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
 
@@ -160,7 +177,9 @@ import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, op
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
   { apiKey :: String
-  , outputDirectory :: String
+  , outputDirectory :: FilePath
+  , linkedFilesDirectory :: FilePath
+  , imagesDirectory :: FilePath
   , outputFile :: String
   , repository :: String
   , userAgent :: String
@@ -168,6 +187,16 @@ data Settings = Settings
   , preambleLocation :: FilePath
   , logEnvironment :: LogEnv
   }
+
+-- | Places where things are saved to.
+data Location
+  = -- | Linked files directory.
+    LinkedFilesDir
+  | -- | Images directory.
+    ImagesDir
+  | -- | Output directory
+    OutputDir
+  deriving stock (Show, Eq, Ord)
 
 -- | The number of an Issue, as found on GitHub.
 type IssueN = Integer
@@ -223,13 +252,15 @@ makeEffect ''Logger
 -- | GHAppy API.
 data GHAppyAct a where
   -- | Creates a directory as specified by 'Settings'.
-  SetUpDir :: GHAppyAct ()
+  SetUpDirs :: GHAppyAct ()
   -- | Pulls all the Issues from the repository specified in 'Settings', and keeps them in memory.
   PullIssues :: GHAppyAct Issues
   -- | Dumps all the issues from memory into a specific folder.
   SaveAvailableIssues :: GHAppyAct [FilePath]
   -- | Uses Pandoc to generate the final report.
   GeneratePDF :: [Leaf] -> GHAppyAct ()
+  -- | Get files to be linked by Pandoc.
+  GetLinkedFile :: Location -> FilePath -> String -> GHAppyAct ()
 
 makeEffect ''GHAppyAct
 
@@ -244,10 +275,8 @@ data Composer a where
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
   -- | Adds a header at specific level.
   AddHeader :: Integer -> String -> Composer ()
-  -- | Adds the standard disclaimer.
-  AddDisclaimer :: Composer ()
-  -- | Adds the standard
-  AddVulnTypes :: Composer ()
+  -- | Add raw markdown file from GitHub raw file url, at a specific level.
+  AddRawMd :: Integer -> String -> Composer ()
 
 makeEffect ''Composer
 
@@ -274,9 +303,7 @@ compose = reinterpret go
         let f = fmap ((\n -> emptyLeaf {issueN = n, level = lvl}) . Just . fst) . M.toList . M.filter (getPredicate p) . unIssues
          in (get >>= tell . f)
       AddHeader lvl str -> tell [emptyLeaf {preamble = [replicate (fromEnum lvl) '#' <> " " <> str]}]
-      AddDisclaimer -> tellJust 0 =<< makeRequest "https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md"
-      AddVulnTypes -> tellJust 1 =<< makeRequest "https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/vulnerability-types.md"
-
+      AddRawMd lvl url -> tellJust lvl =<< makeRequestUTF8 url
     tellJust l s = tell [emptyLeaf {preamble = [s], level = l}]
 
     emptyLeaf :: Leaf
@@ -302,13 +329,23 @@ runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy 
 
     go :: GHAppyAct a -> Eff GHStack a
     go = \case
-      SetUpDir -> log "SetUpDir" "Setting up Directory." >> createOutDirectory
+      SetUpDirs -> log "SetUpDirs" "Setting up Directories." >> createDirs
       PullIssues -> log "PullIssues" "Pulling Issues from GitHub." >> pullIssuesImpl
       SaveAvailableIssues -> log "SaveAvailableIssues" "Saving all Issues to output directory." >> saveAllIssues
       GeneratePDF ls -> log "GeneratePDF" "Running Pandoc." >> runPandoc ls
+      GetLinkedFile location name url -> log "GetLinkedFile" ("Downloading: " <> name <> ".") >> runGetLinked location name url
 
     log :: String -> String -> Eff GHStack ()
     log s = logS ["runGHAppy", s]
+
+runGetLinked :: Location -> String -> String -> Eff GHStack ()
+runGetLinked location name url = do
+  contents <- makeRequestBS url
+  path <- case location of
+    OutputDir -> asks outputDirectory
+    LinkedFilesDir -> asks linkedFilesDirectory
+    ImagesDir -> asks imagesDirectory
+  sendM $ B.writeFile (path </> name) contents
 
 runLogger :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Eff (Logger ': effs) a -> Eff effs a
 runLogger = interpret go
@@ -319,10 +356,15 @@ runLogger = interpret go
         lEnv <- asks logEnvironment
         sendM $ runKatipT lEnv $ logMsg (Namespace $ fromString <$> env) InfoS (logStr msg)
 
-createOutDirectory :: Members '[Reader Settings, IO] effs => Eff effs ()
-createOutDirectory = do
-  x <- asks outputDirectory
-  send $ createDirectory x `catch` (\e -> isAlreadyExistsError e `unless` throwIO e)
+-- | Creates all the necessary directories
+createDirs :: Members '[Reader Settings, IO] effs => Eff effs ()
+createDirs = do
+  outDir <- asks outputDirectory
+  lfDir <- asks linkedFilesDirectory
+  imgDir <- asks imagesDirectory
+  send $ createDirectory outDir `catch` (\e -> isAlreadyExistsError e `unless` throwIO e)
+  send $ createDirectory lfDir `catch` (\e -> isAlreadyExistsError e `unless` throwIO e)
+  send $ createDirectory imgDir `catch` (\e -> isAlreadyExistsError e `unless` throwIO e)
 
 filePath :: Member (Reader Settings) effs => Issue -> Eff effs (FilePath, Issue)
 filePath i@Issue {..} = do
@@ -345,12 +387,19 @@ saveAllIssues :: Members '[Reader Settings, State Issues, IO] effs => Eff effs [
 saveAllIssues = get >>= fmap M.elems . traverse saveIssue . unIssues
 
 -- | Makes a GET requests and returns the body as String. The encoding of the ByteString must be UTF8.
-makeRequest :: LastMember IO eff => String -> Eff eff String
-makeRequest url = do
+makeRequestUTF8 :: LastMember IO eff => String -> Eff eff String
+makeRequestUTF8 url = do
   response <- sendM $ do
     initReq <- parseRequest url
     getResponseBody <$> httpBS initReq
   return $ either (error . show) unpack . ENC.decodeUtf8' $ response
+
+-- | Makes a GET requests and save the content to a file. Basically download. 
+makeRequestBS :: LastMember IO eff => String -> Eff eff ByteString
+makeRequestBS url =
+  sendM $ do
+    initReq <- parseRequest url
+    getResponseBody <$> httpBS initReq
 
 -- | GHAppy pulls all the issues from the GitHub repository.
 pullIssuesImpl :: forall effs. EffGH effs => Eff effs Issues
