@@ -394,6 +394,7 @@ makeRequestUTF8 url = do
     getResponseBody <$> httpBS initReq
   return $ either (error . show) unpack . ENC.decodeUtf8' $ response
 
+-- | Makes a GET requests and save the content to a file. Basically download. 
 makeRequestBS :: LastMember IO eff => String -> Eff eff ByteString
 makeRequestBS url =
   sendM $ do
