@@ -79,6 +79,7 @@ test-suite GHAppy-Tests
   build-depends:
     , GHAppy
     , tasty
+    , tasty-hunit
 
   hs-source-dirs: test
   main-is:        Test.hs
