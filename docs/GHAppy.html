@@ -5,7 +5,7 @@ import Control.Monad (void)
 import Control.Monad.Freer (Eff, Member)
 import GHAppy
 import GHAppy.OptParser (gHAppyOpt)
-import System.FilePath ((<a href=".">.</a>))
+import System.FilePath ((&lt;.&gt;))
 
 -- | Example of a main file for running GHAppy.
 main :: IO ()
@@ -18,9 +18,9 @@ main = do
       setUpDirs
 
       -- Download additional images required.
-      let logo = &quot;MLabs-logo-cropped&quot; <a href=".">.</a> &quot;jpg&quot;
-      let logoCropped = &quot;MLabs-logo&quot; <a href=".">.</a> &quot;jpg&quot;
-      let linkedFiles = &quot;https:/<em>raw.githubusercontent.com</em>mlabs-haskell<em>audit-report-template</em>master<em>linked-files</em>images/&quot;
+      let logo = &quot;MLabs-logo-cropped&quot; &lt;.&gt; &quot;jpg&quot;
+      let logoCropped = &quot;MLabs-logo&quot; &lt;.&gt; &quot;jpg&quot;
+      let linkedFiles = &quot;https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/&quot;
       getLinkedFile ImagesDir logo (linkedFiles &lt;&gt; logo)
       getLinkedFile ImagesDir logoCropped (linkedFiles &lt;&gt; logoCropped)
 
@@ -36,7 +36,7 @@ main = do
 -- | Example Audit report structure.
 auditReport :: (Member Composer effs) =&gt; Eff effs ()
 auditReport = do
-  addRawMd 0 &quot;https:/<em>raw.githubusercontent.com</em>mlabs-haskell<em>audit-report-template</em>master<em>linked-files</em>disclaimer.md&quot;
+  addRawMd 0 &quot;https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md&quot;
 
   addHeader 1 &quot;Contents&quot;
   addFile 1 1
@@ -58,7 +58,7 @@ auditReport = do
   addNewPage
 
   addHeader 1 &quot;Appendix&quot;
-  addRawMd 1 &quot;https:/<em>raw.githubusercontent.com</em>mlabs-haskell<em>audit-report-template</em>master<em>linked-files</em>vulnerability-types.md&quot;
+  addRawMd 1 &quot;https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/vulnerability-types.md&quot;
 
 </pre><p>As can be hopefully seen, one does all the Composing work in the <code><a href="GHAppy.html#t:Composer" title="GHAppy">Composer</a></code> and
 hands over to <code>GHAppy</code> to do all the grunt work of retrieving information,
