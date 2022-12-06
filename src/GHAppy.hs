@@ -1,8 +1,72 @@
+{- | 'GHappy' is a library meant to ease the creation of Audit Reports via the
+ use of Git Hub Issues. The workflow can be described as follows:
+
+1. Fork the audited repository OR work directly in the repository itself.
+2. Label the issues found with suitable and distinct labels.
+3. Compose your audit report referencing the issues' numbers or labels.
+4. Generate the report.
+
+__Example:__
+
+@
+module Main (main) where
+
+import Control.Monad (void)
+import Control.Monad.Freer (Member, Eff)
+import GHAppy.OptParser (gHAppyOpt)
+import GHAppy
+
+-- | Example of a main file for running GHAppy.
+main :: IO ()
+main = do
+  settings <- gHAppyOpt
+  let runner = runGHAppy settings
+  void $
+    runner $ do
+      setUpDir
+      pullIssues
+      s <- runCompose auditReport
+      generatePDF s
+
+-- | Example Audit report structure.
+auditReport :: (Member Composer effs) => Eff effs ()
+auditReport = do
+  addDisclaimer
+
+  addHeader 1 \"Contents\"
+  addFile 1 1
+  addFile 1 6
+  addNewPage
+
+  addHeader 1 \"Reviews\"
+
+  addHeader 2 \"Not Considered Fixed"
+  addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"not-fixed\" <> isOpen
+  addNewPage
+
+  addHeader 2 \"Considered Fixed"
+  addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"fixed\" <> isOpen
+  addNewPage
+
+  addHeader 2 \"Recommendations"
+  addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"recommendation\" <> isOpen
+  addNewPage
+
+  addHeader 1 \"Appendix\"
+  addVulnTypes
+
+@
+
+As can be hopefully seen, one does all the Composing work in the 'Composer' and
+hands over to 'GHAppy' to do all the grunt work of retrieving information,
+rendering, etc.
+-}
 module GHAppy (
   -- * Running GHAppy.
 
-  -- | GHAppy is meant to be easy to work with, and these two functions together with the exposed API should be
-  -- all you need to come up with a nice report. To see an example of it in action, please refer to 'src/Main.hs'.
+  -- | GHAppy is meant to be easy to work with, and these two functions
+  --       together with the exposed API should be all you need to come up with a nice
+  --       report.
   runGHAppy,
   runCompose,
 

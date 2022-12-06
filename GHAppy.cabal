@@ -8,7 +8,8 @@ extra-source-files:
   README.md
 
 description:
-  GHAppy stands for GitHub API Processor, and is a small utility library used for easily composing and creating Audit Reports.
+  GHAppy stands for GitHub API Processor, and is a small utility library used
+  for easily composing and creating Audit Reports.
 
 common settings
   build-depends:
