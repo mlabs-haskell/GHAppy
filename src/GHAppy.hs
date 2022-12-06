@@ -15,7 +15,7 @@ import Control.Monad (void)
 import Control.Monad.Freer (Eff, Member)
 import GHAppy
 import GHAppy.OptParser (gHAppyOpt)
-import System.FilePath ((<.>))
+import System.FilePath ((\<.\>))
 
 -- | Example of a main file for running GHAppy.
 main :: IO ()
@@ -28,11 +28,11 @@ main = do
       setUpDirs
 
       -- Download additional images required.
-      let logo = \"MLabs-logo-cropped\" <.> \"jpg\"
-      let logoCropped = \"MLabs-logo\" <.> \"jpg\"
-      let linkedFiles = \"https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/\"
-      getLinkedFile ImagesDir logo (linkedFiles <> logo)
-      getLinkedFile ImagesDir logoCropped (linkedFiles <> logoCropped)
+      let logo = \"MLabs-logo-cropped\" \<.\> \"jpg\"
+      let logoCropped = \"MLabs-logo\" \<.\> \"jpg\"
+      let linkedFiles = \"https:\/\/raw.githubusercontent.com\/mlabs-haskell\/audit-report-template\/master\/linked-files\/images\/\"
+      getLinkedFile ImagesDir logo (linkedFiles \<\> logo)
+      getLinkedFile ImagesDir logoCropped (linkedFiles \<\> logoCropped)
 
       -- Download all the issues
       pullIssues
@@ -44,9 +44,9 @@ main = do
       generatePDF s
 
 -- | Example Audit report structure.
-auditReport :: (Member Composer effs) => Eff effs ()
+auditReport :: (Member Composer effs) =\> Eff effs ()
 auditReport = do
-  addRawMd 0 \"https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md\"
+  addRawMd 0 \"https:\/\/raw.githubusercontent.com\/mlabs-haskell\/audit-report-template\/master\/linked-files\/disclaimer.md\"
 
   addHeader 1 \"Contents\"
   addFile 1 1
@@ -56,19 +56,19 @@ auditReport = do
   addHeader 1 \"Reviews\"
 
   addHeader 2 \"Not Considered Fixed\"
-  addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"not-fixed\" <> isOpen
+  addAllPagesThat 2 $ hasLabel \"audit\" \<\> hasLabel \"not-fixed\" \<\> isOpen
   addNewPage
 
   addHeader 2 \"Considered Fixed\"
-  addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"fixed\" <> isOpen
+  addAllPagesThat 2 $ hasLabel \"audit\" \<\> hasLabel \"fixed\" \<\> isOpen
   addNewPage
 
   addHeader 2 \"Recommendations\"
-  addAllPagesThat 2 $ hasLabel \"audit\" <> hasLabel \"recommendation\" <> isOpen
+  addAllPagesThat 2 $ hasLabel \"audit\" \<\> hasLabel \"recommendation\" \<\> isOpen
   addNewPage
 
   addHeader 1 \"Appendix\"
-  addRawMd 1 \"https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/vulnerability-types.md\"
+  addRawMd 1 \"https:\/\/raw.githubusercontent.com\/mlabs-haskell\/audit-report-template\/master\/linked-files\/vulnerability-types.md\"
 
 @
 
@@ -394,7 +394,7 @@ makeRequestUTF8 url = do
     getResponseBody <$> httpBS initReq
   return $ either (error . show) unpack . ENC.decodeUtf8' $ response
 
--- | Makes a GET requests and save the content to a file. Basically download. 
+-- | Makes a GET requests and save the content to a file. Basically download.
 makeRequestBS :: LastMember IO eff => String -> Eff eff ByteString
 makeRequestBS url =
   sendM $ do
