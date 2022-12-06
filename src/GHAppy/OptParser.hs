@@ -16,10 +16,22 @@ gHAppyOpt = do
 
 -- | An OptParser for the standard GHAppy settings. In most cases you will want to use 'gHAppyOpt'.
 pSettings :: Parser (LogEnv -> Settings)
-pSettings = Settings <$> pApiKey <*> pOutputDirectory <*> pOutputFile <*> pRepository <*> pUserAgent <*> pPandocTemplateUrl <*> pPreambleLocation
+pSettings =
+  Settings
+    <$> pApiKey
+    <*> pOutputDirectory
+    <*> pLinkedFilesDirectory
+    <*> pImagesDirectory
+    <*> pOutputFile
+    <*> pRepository
+    <*> pUserAgent
+    <*> pPandocTemplateUrl
+    <*> pPreambleLocation
   where
     pApiKey = strOption (long "apikey" <> short 'a')
     pOutputDirectory = strOption (long "output" <> short 'o' <> metavar "OUTDIR")
+    pLinkedFilesDirectory = strOption (long "linked-files") <|> pure ("." </> "linked-files")
+    pImagesDirectory = strOption (long "images-dir") <|> ((</> "images") <$> pLinkedFilesDirectory)
     pOutputFile = strOption (long "outFile" <> short 'f' <> metavar "OUTFILE")
     pRepository = strOption (long "repo" <> short 'r')
     pUserAgent = strOption (long "user" <> short 'u')
