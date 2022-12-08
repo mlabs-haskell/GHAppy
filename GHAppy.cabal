@@ -28,6 +28,7 @@ common settings
     , optparse-applicative
     , pandoc
     , text
+    , yaml
 
   default-extensions:
     ConstraintKinds
@@ -66,6 +67,7 @@ library
     GHAppy
     GHAppy.OptParser
     GHAppy.Types
+    GHAppy.YamlInterface
 
 executable GHAppy
   import:         settings
