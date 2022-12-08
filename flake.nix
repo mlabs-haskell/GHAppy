@@ -11,82 +11,83 @@
     };
   };
   outputs = inputs@{ self, nixpkgs, flake-utils, pch, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        overlays = [ ];
+    flake-utils.lib.eachDefaultSystem
+      (system:
+        let
+          overlays = [ ];
 
-        pkgs = import nixpkgs { inherit system overlays; };
+          pkgs = import nixpkgs { inherit system overlays; };
 
-        # attrset contains a pre-commit-check with a shellHook
-        # and a formatCheck that can be run
-        pc-check = pch.lib.${system}.run {
-          src = ./.;
-          hooks = {
-            # nix formatting, linting
-            nixpkgs-fmt.enable = true;
-            statix.enable = true;
+          # attrset contains a pre-commit-check with a shellHook
+          # and a formatCheck that can be run
+          pc-check = pch.lib.${system}.run {
+            src = ./.;
+            hooks = {
+              # nix formatting, linting
+              nixpkgs-fmt.enable = true;
+              statix.enable = true;
 
-            # haskell formatting, linting
-            fourmolu.enable = true;
-            hlint.enable = true;
+              # haskell formatting, linting
+              fourmolu.enable = true;
+              hlint.enable = true;
 
-            # cabal formatting 
-            cabal-fmt.enable = true;
+              # cabal formatting
+              cabal-fmt.enable = true;
 
-            # shell formatting, linting
-            shellcheck.enable = true;
-            shfmt.enable = true;
+              # shell formatting, linting
+              shellcheck.enable = true;
+              shfmt.enable = true;
 
-            # markdown linting
-            markdownlint.enable = true;
+              # markdown linting
+              markdownlint.enable = true;
+            };
+
+            settings = { };
           };
 
-          settings = { };
-        };
+          additionalPckgs = with pkgs; [ nixpkgs-fmt rlwrap pandoc ];
 
-        additionalPckgs = with pkgs; [ nixpkgs-fmt rlwrap pandoc ];
+          additionalHaskellPckgs = with pkgs.haskellPackages; [
+            stack
+            structured-haskell-mode
+            stylish-haskell
+            apply-refact
+            cabal-fmt
+            cabal-install
+            fourmolu
+            ghcid
+            hasktags
+            hlint
+            zlib
+            haskell-language-server
+            doctest
+          ];
 
-        additionalHaskellPckgs = with pkgs.haskellPackages; [
-          stack
-          structured-haskell-mode
-          stylish-haskell
-          apply-refact
-          cabal-fmt
-          cabal-install
-          fourmolu
-          ghcid
-          hasktags
-          hlint
-          zlib
-          haskell-language-server
-          doctest
-        ];
+          project = returnShellEnv:
+            pkgs.haskellPackages.developPackage {
+              inherit returnShellEnv;
+              name = "GHAppy";
+              root = ./.;
+              withHoogle = true;
+              modifier = drv:
+                (pkgs.haskell.lib.addBuildTools drv
+                  (additionalHaskellPckgs ++ additionalPckgs)
+                );
+            };
+        in
+        {
 
-        project = returnShellEnv:
-          pkgs.haskellPackages.developPackage {
-            inherit returnShellEnv;
-            name = "GHAppy";
-            root = ./.;
-            withHoogle = true;
-            modifier = drv:
-              (pkgs.haskell.lib.addBuildTools drv
-                (additionalHaskellPckgs ++ additionalPckgs)
-              );
+          # Used by `nix build` & `nix run` (prod exe)
+          defaultPackage = project false;
+
+          checks = {
+            formatting = pc-check;
           };
-      in
-      {
 
-        # Used by `nix build` & `nix run` (prod exe)
-        defaultPackage = project false;
-
-        checks = {
-          formatting = pc-check;
-        };
-
-        # Used by `nix develop` (dev shell)
-        devShell = pkgs.mkShell {
-          inherit (project true) buildInputs nativeBuildInputs;
-          inherit (pc-check) shellHook;
-        };
-      });
+          # Used by `nix develop` (dev shell)
+          devShell = pkgs.mkShell {
+            inherit (project true) buildInputs nativeBuildInputs;
+            inherit (pc-check) shellHook;
+          };
+        }) // { herculesCI.ciSystems = [ "x86_64-linux" ]; };
 }
