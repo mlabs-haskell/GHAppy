@@ -1,0 +1,55 @@
+Composer:
+  
+  - RawMd:
+      level: 0 
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md
+
+  - Header: 
+      level: 1 
+      text: Contents
+    
+  - Issue:
+      level: 1
+      number: 1
+    
+  - Issue:
+      level: 1
+      number: 6
+
+  - NewPage: 0
+
+  - Header:
+      level: 1
+      text: "Reviews"
+
+  - AllIssuesThat:
+      level: 2 
+      filters:
+        - hasLabel: "audit"
+        - hasLabel: "not-fixed"
+        - isOpen: true
+          
+  - NewPage: 0
+
+  - Header: 
+      level: 2 
+      text: "Considered Fixed"
+    
+  - AllIssuesThat: 
+      level: 2 
+      filters:
+        - hasLabel: "audit"
+        - hasLabel: "fixed"
+        - isOpen: true
+
+GHAppy:
+  - GetLinkedFile:
+      location: ImagesDir
+      name: MLabs-logo-cropped.jpg
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo-cropped.jpg
+      
+  - GetLinkedFile:
+      location: ImagesDir
+      name: MLabs-logo-cropped.jpg
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-xreport-template/master/linked-files/images/MLabs-logo-cropped.jpg
+
