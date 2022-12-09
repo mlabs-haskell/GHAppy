@@ -157,7 +157,6 @@ import qualified Data.Map as M
 import Data.String (IsString (fromString))
 import Data.Text (unpack)
 import qualified Data.Text.Encoding as ENC
-
 import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, runKatipT)
 
 import Data.Maybe (fromMaybe)
@@ -439,9 +438,11 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
                 ]
                 reqIssues
         getResponseBody <$> httpBS reqIssues'
-
       case (decode @[T.Entry]) $ LB.packBytes $ BS.unpack response of
-        Nothing -> error "Cannot decode body! Something has gone fundamentally wrong."
+        Nothing -> do
+          logS ["getResponseBody", "Decode"] "Decoding failed! Here's what I received when pulling the issues:"
+          logS ["getResponseBody", "Decode"] $ show $ LB.packBytes $ BS.unpack response
+          error "Cannot decode body! Something has gone fundamentally wrong."
         Just entries -> do
           let issues = fmap toIssue entries
           modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
