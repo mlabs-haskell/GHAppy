@@ -44,12 +44,12 @@ Composer:
 
 GHAppy:
   - GetLinkedFile:
-      location: ImagesDir
-      name: MLabs-logo-cropped.jpg
-      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo-cropped.jpg
+      location: Images
+      name: MLabs-logo.jpg
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo.jpg
       
   - GetLinkedFile:
-      location: ImagesDir
-      name: MLabs-logo-cropped.jpg
-      link: https://raw.githubusercontent.com/mlabs-haskell/audit-xreport-template/master/linked-files/images/MLabs-logo-cropped.jpg
+      location: Images
+      name: MLabs-logo-cropped.jpg 
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo-cropped.jpg
 

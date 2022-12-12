@@ -4,4 +4,5 @@ cabal run GHAppy -- \
 	-o "out" \
 	-f "outFile" \
 	-r "mlabs-haskell/optim-onchain-audit" \
-	-u "cstml"
+	-u "cstml" \
+	-i ./example/report2.yaml

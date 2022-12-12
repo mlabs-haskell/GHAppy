@@ -1,16 +1,79 @@
-{-# OPTIONS_GHC -Wwarn #-}
-
-module GHAppy.YamlInterface where
+module GHAppy.YamlInterface (runYamlInterface) where
 
 import Control.Applicative
+import Control.Monad
+import Control.Monad.Freer
+import Data.Char
+import Data.Foldable
+import Data.Functor.Contravariant
 import Data.Yaml
+import GHAppy (Composer, GHAppyAct, GHStack)
+import qualified GHAppy as GH
 import GHC.Generics
+
+runYamlInterface :: GH.Settings -> FilePath -> IO ()
+runYamlInterface settings path = do
+  instr <- either (error . show) id <$> decodeFileEither @YamlInterface path
+  yamlToInstructions settings instr
+
+yamlToInstructions :: GH.Settings -> YamlInterface -> IO ()
+yamlToInstructions settings YamlInterface {..} = do
+  let gInstr = traverse_ gHAppyInstrToEff gHAppy
+  let comp = traverse_ compInstrToEff composer
+
+  let runner = GH.runGHAppy settings
+  void $
+    runner $ do
+      -- Set up necessary directories.
+      GH.setUpDirs
+      -- Download additional files required.
+      gInstr
+      -- Download all the issues
+      GH.pullIssues
+      -- Compose our report
+      s <- GH.runCompose comp
+      -- Generate our pdf.
+      GH.generatePDF s
+
+compInstrToEff :: (Member Composer effs) => ComposerInstruction -> Eff effs ()
+compInstrToEff = \case
+  RawMd {..} -> GH.addRawMd level link
+  Header {..} -> GH.addHeader level text
+  Issue {..} -> GH.addFile level number
+  -- fixme: newpage should be extended
+  NewPage {} -> GH.addNewPage
+  AllIssuesThat {..} -> GH.addAllPagesThat level (mconcat $ filterToPredicate <$> filters)
+
+filterToPredicate :: Filter -> Predicate GH.Issue
+filterToPredicate = \case
+  HasLabel l -> GH.hasLabel l
+  IsOpen True -> GH.isOpen
+  IsOpen False -> mempty
+
+gHAppyInstrToEff :: GHAppyInstruction -> Eff (GHAppyAct ': GHStack) ()
+gHAppyInstrToEff = \case
+  GetLinkedFile {..} -> GH.getLinkedFile (toStdLocation location) name gh'link
+  where
+    toStdLocation :: String -> GH.Location
+    toStdLocation s = case toLower <$> s of
+      "linkedfiles" -> GH.LinkedFilesDir
+      "images" -> GH.ImagesDir
+      "output" -> GH.OutputDir
+      _ ->
+        error $
+          unlines
+            [ "Unknown location: " <> s
+            , "Useable Locations are:"
+            , " * LinkedFiles"
+            , " * Images"
+            , " * Output"
+            ]
 
 data YamlInterface = YamlInterface
   { composer :: [ComposerInstruction]
   , gHAppy :: [GHAppyInstruction]
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving stock (Eq, Show, Generic)
 
 instance FromJSON YamlInterface where
   parseJSON (Object o) =
@@ -24,7 +87,7 @@ data GHAppyInstruction = GetLinkedFile
   , name :: String
   , gh'link :: String
   }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving stock (Eq, Show, Generic)
 
 instance FromJSON GHAppyInstruction where
   parseJSON (Object o) = do
@@ -53,7 +116,7 @@ data ComposerInstruction
       { level :: Integer
       , filters :: [Filter]
       }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving stock (Eq, Show, Generic)
 
 instance FromJSON ComposerInstruction where
   parseJSON (Object o) =
@@ -101,7 +164,7 @@ instance FromJSON ComposerInstruction where
 data Filter
   = HasLabel String
   | IsOpen Bool
-  deriving (Eq, Show, Generic)
+  deriving stock (Eq, Show, Generic)
 
 instance FromJSON Filter where
   parseJSON (Object o) =
@@ -113,8 +176,3 @@ instance ToJSON Filter where
   toJSON = \case
     HasLabel s -> object ["hasLabel" .= s]
     IsOpen b -> object ["isOpen" .= b]
-
-main :: IO ()
-main = do
-  print =<< decodeFileEither @YamlInterface "./example/report2.yaml"
-  pure ()

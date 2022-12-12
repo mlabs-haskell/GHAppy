@@ -1,10 +1,20 @@
-module GHAppy.OptParser (gHAppyOpt, pSettings) where
+module GHAppy.OptParser (gHAppyOpt, pSettings, gHAppyOptApp) where
 
 import GHAppy
 import Katip
 import Options.Applicative
 import System.FilePath ((<.>), (</>))
 import System.IO (stdout)
+
+-- | Retrieves the Settings and initialises the Logger to output to stdout.
+gHAppyOptApp :: IO (Settings, FilePath)
+gHAppyOptApp = do
+  handleScribe <- mkHandleScribe ColorIfTerminal stdout (permitItem InfoS) V2
+  mkLogEnv <- registerScribe "stdout" handleScribe defaultScribeSettings =<< initLogEnv "GHAppy" "production"
+  (f, fp) <- execParser $ info ((,) <$> pSettings <*> pYamlLocation) fullDesc
+  pure (f mkLogEnv, fp)
+  where
+    pYamlLocation = strOption (long "input" <> short 'i' <> metavar "input file")
 
 -- | Retrieves the Settings and initialises the Logger to output to stdout.
 gHAppyOpt :: IO Settings
