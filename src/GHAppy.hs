@@ -308,18 +308,6 @@ compose = reinterpret go
     emptyLeaf :: Leaf
     emptyLeaf = Leaf {issueN = Nothing, preamble = mempty, level = 0}
 
--- | Predicate for issues that have a specific label.
-hasLabel :: String -> Predicate Issue
-hasLabel s = Predicate $ \Issue {..} -> s `elem` labels
-
--- | Predicate for open issue.
-isOpen :: Predicate Issue
-isOpen = Predicate $ \Issue {..} -> status == Open
-
--- | Predicate for issues that have only a specific label.
-hasOnlyLabel :: String -> Predicate Issue
-hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
-
 runGHAppy :: Settings -> Eff (GHAppyAct ': GHStack) a -> IO a
 runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy m))))
   where
@@ -549,3 +537,17 @@ savePandocTemplate = do
 
 getPandocTemplateLocation :: Members '[Reader Settings] fs => Eff fs FilePath
 getPandocTemplateLocation = asks outputDirectory >>= \d -> pure $ "." </> d </> "template" <.> "tpl"
+
+-- Predicates ------------------------------------------------------------------------
+
+-- | Predicate for issues that have a specific label.
+hasLabel :: String -> Predicate Issue
+hasLabel s = Predicate $ \Issue {..} -> s `elem` labels
+
+-- | Predicate for open issue.
+isOpen :: Predicate Issue
+isOpen = Predicate $ \Issue {..} -> status == Open
+
+-- | Predicate for issues that have only a specific label.
+hasOnlyLabel :: String -> Predicate Issue
+hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
