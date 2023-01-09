@@ -1,4 +1,4 @@
-module Example (main) where
+module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.Freer (Eff, Member)
@@ -23,6 +23,7 @@ main = do
       getLinkedFile ImagesDir logoCropped (linkedFiles <> logoCropped)
       -- Download all the issues
       pullIssues
+      saveAvailableIssues
       -- Compose our report
       s <- runCompose auditReport
       -- Generate our pdf.

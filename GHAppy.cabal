@@ -69,6 +69,12 @@ library
     GHAppy.Types
     GHAppy.YamlInterface
 
+executable Example
+  import:         settings
+  main-is:        Example.hs
+  hs-source-dirs: app
+  build-depends:  GHAppy
+
 executable GHAppy
   import:         settings
   main-is:        Main.hs
