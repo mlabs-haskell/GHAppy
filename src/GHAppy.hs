@@ -423,7 +423,6 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
                 , ("state", Just "all")
                 , ("direction", Just "asc")
                 , ("page", Just $ fromString $ show n)
-                , ("labels", Just "audit")
                 ]
                 reqIssues
         getResponseBody <$> httpBS reqIssues'
