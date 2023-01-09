@@ -412,6 +412,7 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
                     [ ("Accept", "application/vnd.github+json")
                     , ("Authorization", fromString $ "Bearer " <> apiKey)
                     , ("User-Agent", fromString userAgent)
+                    , ("X-GitHub-Api-Version", "2022-11-28")
                     ]
                 }
 
@@ -447,14 +448,16 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
           }
       )
 
-leafToMDPP :: forall effs. Member (State Issues) effs => Leaf -> Eff effs String
+leafToMDPP :: forall effs. Members '[State Issues] effs => Leaf -> Eff effs String
 leafToMDPP Leaf {..} = do
   (Issues s) <- get
   formattedContent <- case issueN of
     Nothing ->
       pure mempty
     Just no -> do
-      let content = unlines preamble <> formatIssue (s M.! no)
+      let err = error . ("Cannot find issue: " <>) . show
+      let issue = fromMaybe (err no) $ s M.!? no
+      let content = unlines preamble <> formatIssue issue
       let bumpedContent = bumpHeaders level content
       replaceNumbers bumpedContent
 
