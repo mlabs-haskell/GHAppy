@@ -15,6 +15,7 @@ Composer:
 
   - CheckSum:
       files:
+        - app/Main.hs
         - src/Canonical/Shared.hs
         - src/Canonical/DebugUtilities.h
         - src/Canonical/Vesting.hs

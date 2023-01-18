@@ -6,5 +6,5 @@ cabal run GHAppy -- \
 	-o "_out" \
 	-f "outFile" \
 	-r "jpg-store/vesting-contract" \
-	-u "IAmPara0x" \
+	-u "cstml" \
 	-i ./example/report2.yaml

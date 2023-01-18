@@ -43,6 +43,7 @@ common settings
     GADTs
     GeneralizedNewtypeDeriving
     LambdaCase
+    NamedFieldPuns
     OverloadedStrings
     RankNTypes
     RecordWildCards

@@ -1,5 +1,3 @@
-{-# LANGUAGE NamedFieldPuns #-}
-
 {- | 'GHappy' is a library meant to ease the creation of Audit Reports via the
  use of Git Hub Issues. The workflow can be described as follows:
 
@@ -284,7 +282,7 @@ data Composer a where
   AddHeader :: Integer -> String -> Composer ()
   -- | Add raw markdown file from GitHub raw file url, at a specific level.
   AddRawMd :: Integer -> String -> Composer ()
-  -- | Add raw markdown file from GitHub raw file url, at a specific level.
+  -- | Add checksum info for the given filePath and commithash of the repo.
   AddCheckSumInfo :: CommitHash -> [FilePath] -> Composer ()
 
 makeEffect ''Composer
@@ -399,6 +397,7 @@ makeRequestBS url =
     initReq <- parseRequest url
     getResponseBody <$> httpBS initReq
 
+-- Add information about all the files and their checksums along with the commit hash.
 addCheckSums :: forall effs. EffGH effs => CommitHash -> [FilePath] -> Eff (Writer [Leaf] ': effs) ()
 addCheckSums commitHash files = do
   Settings {repository} <- ask
@@ -430,6 +429,7 @@ addCheckSums commitHash files = do
 
   tell [Leaf {preamble = [checkSumTemplate], level = 1, issueN = Nothing}]
 
+-- given a commithash and a filePath, get the specified file from the github repository and compute the hash of it.
 getHashOfGHFile :: forall effs. EffGH effs => CommitHash -> FilePath -> Eff effs String
 getHashOfGHFile commitHash filePath = do
   Settings {repository} <- ask
