@@ -27,6 +27,7 @@ common settings
     , mtl
     , optparse-applicative
     , pandoc
+    , SHA                   ==1.6.4.4
     , text
     , yaml
 

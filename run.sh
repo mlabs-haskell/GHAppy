@@ -2,9 +2,9 @@
 # or nix run github:mlabs-haskell/GHAppy
 
 cabal run GHAppy -- \
-	-a $(cat ./token.txt) \
-	-o "out" \
+	-a $(cat ./.token.txt) \
+	-o "_out" \
 	-f "outFile" \
-	-r "mlabs-haskell/optim-onchain-audit" \
-	-u "cstml" \
+	-r "jpg-store/vesting-contract" \
+	-u "IAmPara0x" \
 	-i ./example/report2.yaml

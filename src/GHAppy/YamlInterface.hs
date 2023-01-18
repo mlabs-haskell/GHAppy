@@ -9,6 +9,7 @@ import Data.Functor.Contravariant
 import Data.Yaml
 import GHAppy (Composer, GHAppyAct, GHStack)
 import qualified GHAppy as GH
+import GHAppy.Types (CommitHash)
 import GHC.Generics
 
 runYamlInterface :: GH.Settings -> FilePath -> IO ()
@@ -43,6 +44,7 @@ compInstrToEff = \case
   -- fixme: newpage should be extended
   NewPage {} -> GH.addNewPage
   AllIssuesThat {..} -> GH.addAllPagesThat level (mconcat $ filterToPredicate <$> filters)
+  CheckSum {..} -> GH.addCheckSumInfo commitHash files
 
 filterToPredicate :: Filter -> Predicate GH.Issue
 filterToPredicate = \case
@@ -116,6 +118,10 @@ data ComposerInstruction
       { level :: Integer
       , filters :: [Filter]
       }
+  | CheckSum
+      { files :: [FilePath]
+      , commitHash :: CommitHash
+      }
   deriving stock (Eq, Show, Generic)
 
 instance FromJSON ComposerInstruction where
@@ -157,6 +163,16 @@ instance FromJSON ComposerInstruction where
                 AllIssuesThat
                   { level = le
                   , filters = fs
+                  }
+          )
+      <|> ( do
+              innerObject <- o .: "CheckSum"
+              files <- innerObject .: "files"
+              commitHash <- innerObject .: "commitHash"
+              pure $
+                CheckSum
+                  { files = files
+                  , commitHash = commitHash
                   }
           )
   parseJSON _ = mempty

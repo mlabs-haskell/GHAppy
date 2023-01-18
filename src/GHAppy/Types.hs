@@ -63,3 +63,5 @@ data Entry = Entry
 
 instance FromJSON Entry
 instance ToJSON Entry
+
+type CommitHash = String

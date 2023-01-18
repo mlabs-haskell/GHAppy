@@ -1,55 +1,100 @@
 Composer:
-  
+
+#-------------------------------------------------------------------------------
+# Disclaimer
   - RawMd:
-      level: 0 
+      level: 0
       link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md
 
-  - Header: 
-      level: 1 
-      text: Contents
-    
+  - NewPage: 0
+#-------------------------------------------------------------------------------
+# Audit Background
   - Issue:
-      level: 1
+      level: 0
       number: 1
-    
-  - Issue:
-      level: 1
-      number: 6
+
+  - CheckSum:
+      files:
+        - src/Canonical/Shared.hs
+        - src/Canonical/DebugUtilities.h
+        - src/Canonical/Vesting.hs
+      commitHash: 703566b6e9e49ab89605dc196059086a40267134
+
 
   - NewPage: 0
-
+#-------------------------------------------------------------------------------
+# Findings
   - Header:
       level: 1
-      text: "Reviews"
+      text: Findings
 
-  - AllIssuesThat:
-      level: 2 
-      filters:
-        - hasLabel: "audit"
-        - hasLabel: "not-fixed"
-        - isOpen: true
-          
+  - Issue: # Summary
+      level: 1
+      number: 20
+
   - NewPage: 0
 
-  - Header: 
-      level: 2 
-      text: "Considered Fixed"
-    
-  - AllIssuesThat: 
-      level: 2 
+  # Vulnerabilities
+  - Header:
+      level: 2
+      text: Vulnerabilities
+
+  - AllIssuesThat:
+      level: 2
       filters:
-        - hasLabel: "audit"
-        - hasLabel: "fixed"
+        - hasLabel: audit
+        - hasLabel: audit-findings
         - isOpen: true
+
+  - NewPage: 0
+
+  # Recommendation
+  - Header:
+      level: 2
+      text: Recommendations
+
+  - AllIssuesThat:
+      level: 2
+      filters:
+        - hasLabel: audit
+        - hasLabel: recommendation
+        - isOpen: true
+
+  - NewPage: 0
+#-------------------------------------------------------------------------------
+  # Testing
+  - Issue:
+      level: 0
+      number: 21
+
+  - NewPage: 0
+#-------------------------------------------------------------------------------
+  # Conclusion
+  - Issue:
+      level: 0
+      number: 22
+
+  - NewPage: 0
+#-------------------------------------------------------------------------------
+# Appendix
+  # Findings
+  - Header:
+      level: 1
+      text: Appendix
+
+  - RawMd:
+      level: 1
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/vulnerability-types.md
+
+#-------------------------------------------------------------------------------
 
 GHAppy:
   - GetLinkedFile:
       location: Images
       name: MLabs-logo.jpg
       link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo.jpg
-      
+
   - GetLinkedFile:
       location: Images
-      name: MLabs-logo-cropped.jpg 
+      name: MLabs-logo-cropped.jpg
       link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo-cropped.jpg
-

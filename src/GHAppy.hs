@@ -1,3 +1,5 @@
+{-# LANGUAGE NamedFieldPuns #-}
+
 {- | 'GHappy' is a library meant to ease the creation of Audit Reports via the
  use of Git Hub Issues. The workflow can be described as follows:
 
@@ -115,6 +117,7 @@ module GHAppy (
   addHeader,
   addFile,
   addRawMd,
+  addCheckSumInfo,
 
   -- * GHAppy predicates.
 
@@ -159,7 +162,9 @@ import Data.Text (unpack)
 import qualified Data.Text.Encoding as ENC
 import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, runKatipT)
 
+import Data.Digest.Pure.SHA (sha256, showDigest)
 import Data.Maybe (fromMaybe)
+import Text.Printf (printf)
 
 import qualified Data.ByteString as B
 import Network.HTTP.Conduit (Request (requestHeaders), setQueryString)
@@ -171,6 +176,9 @@ import System.IO.Error (isAlreadyExistsError)
 
 import qualified GHAppy.Types as T
 
+import Data.ByteString.Lazy (fromStrict)
+import Data.List (intersperse)
+import GHAppy.Types (CommitHash)
 import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
 -- | Used by GHAppy for necessary information.
@@ -276,6 +284,8 @@ data Composer a where
   AddHeader :: Integer -> String -> Composer ()
   -- | Add raw markdown file from GitHub raw file url, at a specific level.
   AddRawMd :: Integer -> String -> Composer ()
+  -- | Add raw markdown file from GitHub raw file url, at a specific level.
+  AddCheckSumInfo :: CommitHash -> [FilePath] -> Composer ()
 
 makeEffect ''Composer
 
@@ -303,6 +313,7 @@ compose = reinterpret go
          in (get >>= tell . f)
       AddHeader lvl str -> tell [emptyLeaf {preamble = [replicate (fromEnum lvl) '#' <> " " <> str]}]
       AddRawMd lvl url -> tellJust lvl =<< makeRequestUTF8 url
+      AddCheckSumInfo commitHash files -> addCheckSums commitHash files
     tellJust l s = tell [emptyLeaf {preamble = [s], level = l}]
 
     emptyLeaf :: Leaf
@@ -387,6 +398,50 @@ makeRequestBS url =
   sendM $ do
     initReq <- parseRequest url
     getResponseBody <$> httpBS initReq
+
+addCheckSums :: forall effs. EffGH effs => CommitHash -> [FilePath] -> Eff (Writer [Leaf] ': effs) ()
+addCheckSums commitHash files = do
+  Settings {repository} <- ask
+
+  logS ["runGHAppy", "AddCheckSumInfo"] (printf "commit hash: %s, files: %s" commitHash (show files))
+  fileHashes <- mapM (getHashOfGHFile commitHash) files
+
+  let checkSumTemplate :: String
+      checkSumTemplate =
+        unlines $
+          intersperse
+            ""
+            [ "## Information"
+            , printf
+                "MLabs analysed the validators and minting scripts from the github.com/[%s](https://github.com/%s)) repository starting at commit `%s`."
+                repository
+                repository
+                commitHash
+            , "## Audited Files Checksums"
+            , printf
+                "The following checksums are those of files captured by commit `%s`: and were generate using following haskell library:"
+                (take 7 commitHash)
+            , "```\nSHA==1.6.4.4\n```"
+            , "The checksums are:"
+            , "```"
+            ]
+            ++ zipWith makeFileCheckSumMD fileHashes files
+            ++ ["```", ""]
+
+  tell [Leaf {preamble = [checkSumTemplate], level = 1, issueN = Nothing}]
+
+getHashOfGHFile :: forall effs. EffGH effs => CommitHash -> FilePath -> Eff effs String
+getHashOfGHFile commitHash filePath = do
+  Settings {repository} <- ask
+
+  let rawFileUrl =
+        printf
+          "https://raw.githubusercontent.com/%s/%s/%s"
+          repository
+          commitHash
+          filePath
+  filecontent <- makeRequestBS rawFileUrl
+  return (showDigest $ sha256 $ fromStrict filecontent)
 
 -- | GHAppy pulls all the issues from the GitHub repository.
 pullIssuesImpl :: forall effs. EffGH effs => Eff effs Issues
@@ -553,3 +608,6 @@ isOpen = Predicate $ \Issue {..} -> status == Open
 -- | Predicate for issues that have only a specific label.
 hasOnlyLabel :: String -> Predicate Issue
 hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
+
+makeFileCheckSumMD :: String -> FilePath -> String
+makeFileCheckSumMD fileHash = printf "%s...%s  %s" (take 4 fileHash) (drop 60 fileHash)
