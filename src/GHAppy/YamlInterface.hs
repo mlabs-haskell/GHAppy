@@ -9,6 +9,8 @@ import Data.Functor.Contravariant
 import Data.Yaml
 import GHAppy (Composer, GHAppyAct, GHStack)
 import qualified GHAppy as GH
+import GHAppy.Types (CheckSumInfo (..))
+import GHAppy.Utils (isDirectory)
 import GHC.Generics
 
 runYamlInterface :: GH.Settings -> FilePath -> IO ()
@@ -35,7 +37,7 @@ yamlToInstructions settings YamlInterface {..} = do
       -- Generate our pdf.
       GH.generatePDF s
 
-compInstrToEff :: (Member Composer effs) => ComposerInstruction -> Eff effs ()
+compInstrToEff :: (Member Composer effs, Member GHAppyAct effs) => ComposerInstruction -> Eff effs ()
 compInstrToEff = \case
   RawMd {..} -> GH.addRawMd level link
   Header {..} -> GH.addHeader level text
@@ -43,6 +45,7 @@ compInstrToEff = \case
   -- fixme: newpage should be extended
   NewPage {} -> GH.addNewPage
   AllIssuesThat {..} -> GH.addAllPagesThat level (mconcat $ filterToPredicate <$> filters)
+  CheckSum {..} -> when (any isDirectory $ files checkSumInfo) (GH.cloneRepo $ commitHash checkSumInfo) >> GH.addCheckSumInfo level number checkSumInfo
 
 filterToPredicate :: Filter -> Predicate GH.Issue
 filterToPredicate = \case
@@ -116,6 +119,11 @@ data ComposerInstruction
       { level :: Integer
       , filters :: [Filter]
       }
+  | CheckSum
+      { number :: Integer
+      , checkSumInfo :: CheckSumInfo
+      , level :: Integer
+      }
   deriving stock (Eq, Show, Generic)
 
 instance FromJSON ComposerInstruction where
@@ -157,6 +165,18 @@ instance FromJSON ComposerInstruction where
                 AllIssuesThat
                   { level = le
                   , filters = fs
+                  }
+          )
+      <|> ( do
+              innerObject <- o .: "CheckSum"
+              number <- innerObject .: "number"
+              level <- innerObject .: "level"
+              checkSumInfo <- innerObject .: "info"
+              pure $
+                CheckSum
+                  { number = number
+                  , checkSumInfo = checkSumInfo
+                  , level = level
                   }
           )
   parseJSON _ = mempty

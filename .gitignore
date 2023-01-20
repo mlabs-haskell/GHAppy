@@ -4,6 +4,9 @@ dist-newstyle
 token.txtresult
 result
 token.txt
+.token.txt
+_out/
+hie.yaml
 .vscode
 .direnv
 .pre-commit-config.yaml
