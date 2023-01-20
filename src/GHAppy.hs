@@ -600,6 +600,7 @@ runPandoc fs = do
         , optInputFiles = Just [mdFile]
         , optTemplate = Just pTplFl
         }
+
   sendM $ removeFile pTplFl
 
 getPreamble :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs String
