@@ -27,11 +27,13 @@ common settings
     , mtl
     , optparse-applicative
     , pandoc
-    , SHA                   ==1.6.4.4
+    , SHA
+    , shell-conduit
     , text
     , yaml
 
   default-extensions:
+    BlockArguments
     ConstraintKinds
     DataKinds
     DeriveAnyClass
@@ -63,12 +65,13 @@ common settings
     -fprint-explicit-kinds
 
 library
-  import:          settings 
+  import:          settings
   hs-source-dirs:  src
   exposed-modules:
     GHAppy
     GHAppy.OptParser
     GHAppy.Types
+    GHAppy.Utils
     GHAppy.YamlInterface
 
 executable Example

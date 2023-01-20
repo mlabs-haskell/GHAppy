@@ -7,78 +7,75 @@ Composer:
       link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md
 
   - NewPage: 0
+
 #-------------------------------------------------------------------------------
 # Audit Background
-  - Issue:
+  - CheckSum:
       level: 0
       number: 1
-
-  - CheckSum:
-      files:
-        - app/Main.hs
-        - src/Canonical/Shared.hs
-        - src/Canonical/DebugUtilities.h
-        - src/Canonical/Vesting.hs
-      commitHash: 703566b6e9e49ab89605dc196059086a40267134
-
+      info:
+        files:
+          - benchmark-results.yaml
+          - cabal-haskell.nix.project
+          - flake.nix
+          - hash-checks/Main.hs
+          - indigo.cabal
+          - serialise/Main.hs
+          - src/Indigo/Contracts/Vesting
+          - src/Indigo/Utils/Helpers.hs
+          - src/Indigo/Utils/Utils.hs
+          - tests
+        commitHash: a9c9b3ed6675721197656bde8dc7a8871cb608cc
 
   - NewPage: 0
-#-------------------------------------------------------------------------------
-# Findings
-  - Header:
-      level: 1
-      text: Findings
 
-  - Issue: # Summary
-      level: 1
-      number: 20
+# Findings and Reccomendations
+  - Issue:
+      level: 0
+      number: 11
 
   - NewPage: 0
 
   # Vulnerabilities
   - Header:
-      level: 2
+      level: 1
       text: Vulnerabilities
 
   - AllIssuesThat:
-      level: 2
+      level: 1
       filters:
-        - hasLabel: audit
-        - hasLabel: audit-findings
+        - hasLabel: "vulnerability"
         - isOpen: true
 
   - NewPage: 0
+
+  # Hypotheses
+  - Header:
+      level: 1
+      text: Hypotheses
+
+  - AllIssuesThat:
+      level: 1
+      filters:
+        - hasLabel: "hypothesis"
+        - isOpen: true
 
   # Recommendation
   - Header:
-      level: 2
+      level: 1
       text: Recommendations
 
   - AllIssuesThat:
-      level: 2
+      level: 1
       filters:
-        - hasLabel: audit
-        - hasLabel: recommendation
+        - hasLabel: "recommendation"
         - isOpen: true
 
-  - NewPage: 0
-#-------------------------------------------------------------------------------
-  # Testing
-  - Issue:
-      level: 0
-      number: 21
 
   - NewPage: 0
-#-------------------------------------------------------------------------------
-  # Conclusion
-  - Issue:
-      level: 0
-      number: 22
 
-  - NewPage: 0
 #-------------------------------------------------------------------------------
 # Appendix
-  # Findings
   - Header:
       level: 1
       text: Appendix

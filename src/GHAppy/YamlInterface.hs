@@ -9,7 +9,8 @@ import Data.Functor.Contravariant
 import Data.Yaml
 import GHAppy (Composer, GHAppyAct, GHStack)
 import qualified GHAppy as GH
-import GHAppy.Types (CommitHash)
+import GHAppy.Types (CheckSumInfo (..))
+import GHAppy.Utils (isDirectory)
 import GHC.Generics
 
 runYamlInterface :: GH.Settings -> FilePath -> IO ()
@@ -36,7 +37,7 @@ yamlToInstructions settings YamlInterface {..} = do
       -- Generate our pdf.
       GH.generatePDF s
 
-compInstrToEff :: (Member Composer effs) => ComposerInstruction -> Eff effs ()
+compInstrToEff :: (Member Composer effs, Member GHAppyAct effs) => ComposerInstruction -> Eff effs ()
 compInstrToEff = \case
   RawMd {..} -> GH.addRawMd level link
   Header {..} -> GH.addHeader level text
@@ -44,7 +45,7 @@ compInstrToEff = \case
   -- fixme: newpage should be extended
   NewPage {} -> GH.addNewPage
   AllIssuesThat {..} -> GH.addAllPagesThat level (mconcat $ filterToPredicate <$> filters)
-  CheckSum {..} -> GH.addCheckSumInfo commitHash files
+  CheckSum {..} -> when (any isDirectory $ files checkSumInfo) (GH.cloneRepo $ commitHash checkSumInfo) >> GH.addCheckSumInfo level number checkSumInfo
 
 filterToPredicate :: Filter -> Predicate GH.Issue
 filterToPredicate = \case
@@ -119,8 +120,9 @@ data ComposerInstruction
       , filters :: [Filter]
       }
   | CheckSum
-      { files :: [FilePath]
-      , commitHash :: CommitHash
+      { number :: Integer
+      , checkSumInfo :: CheckSumInfo
+      , level :: Integer
       }
   deriving stock (Eq, Show, Generic)
 
@@ -167,12 +169,14 @@ instance FromJSON ComposerInstruction where
           )
       <|> ( do
               innerObject <- o .: "CheckSum"
-              files <- innerObject .: "files"
-              commitHash <- innerObject .: "commitHash"
+              number <- innerObject .: "number"
+              level <- innerObject .: "level"
+              checkSumInfo <- innerObject .: "info"
               pure $
                 CheckSum
-                  { files = files
-                  , commitHash = commitHash
+                  { number = number
+                  , checkSumInfo = checkSumInfo
+                  , level = level
                   }
           )
   parseJSON _ = mempty

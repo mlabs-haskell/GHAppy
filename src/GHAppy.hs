@@ -1,3 +1,6 @@
+{-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE TupleSections #-}
+
 {- | 'GHappy' is a library meant to ease the creation of Audit Reports via the
  use of Git Hub Issues. The workflow can be described as follows:
 
@@ -108,6 +111,7 @@ module GHAppy (
   saveAvailableIssues,
   generatePDF,
   getLinkedFile,
+  cloneRepo,
 
   -- * Composer specific API.
   addAllPagesThat,
@@ -156,7 +160,8 @@ import Data.Functor.Contravariant (Predicate (Predicate), getPredicate)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.String (IsString (fromString))
-import Data.Text (unpack)
+import Data.Text (Text, pack, unpack)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as ENC
 import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, runKatipT)
 
@@ -173,10 +178,12 @@ import System.FilePath ((<.>), (</>))
 import System.IO.Error (isAlreadyExistsError)
 
 import qualified GHAppy.Types as T
+import GHAppy.Utils (formatChecksum, getAllFiles, isDirectory, removeRepoPath, repoName)
 
 import Data.ByteString.Lazy (fromStrict)
-import Data.List (intersperse)
-import GHAppy.Types (CommitHash)
+import Data.Conduit.Shell (shell)
+import qualified Data.Conduit.Shell as Shell
+import GHAppy.Types (CheckSumInfo (..), CommitHash)
 import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
 -- | Used by GHAppy for necessary information.
@@ -266,6 +273,7 @@ data GHAppyAct a where
   GeneratePDF :: [Leaf] -> GHAppyAct ()
   -- | Get files to be linked by Pandoc.
   GetLinkedFile :: Location -> FilePath -> String -> GHAppyAct ()
+  CloneRepo :: CommitHash -> GHAppyAct ()
 
 makeEffect ''GHAppyAct
 
@@ -283,7 +291,7 @@ data Composer a where
   -- | Add raw markdown file from GitHub raw file url, at a specific level.
   AddRawMd :: Integer -> String -> Composer ()
   -- | Add checksum info for the given filePath and commithash of the repo.
-  AddCheckSumInfo :: CommitHash -> [FilePath] -> Composer ()
+  AddCheckSumInfo :: Integer -> IssueN -> CheckSumInfo -> Composer ()
 
 makeEffect ''Composer
 
@@ -311,7 +319,7 @@ compose = reinterpret go
          in (get >>= tell . f)
       AddHeader lvl str -> tell [emptyLeaf {preamble = [replicate (fromEnum lvl) '#' <> " " <> str]}]
       AddRawMd lvl url -> tellJust lvl =<< makeRequestUTF8 url
-      AddCheckSumInfo commitHash files -> addCheckSums commitHash files
+      AddCheckSumInfo level issueN checkSumInfo -> addCheckSums level issueN checkSumInfo
     tellJust l s = tell [emptyLeaf {preamble = [s], level = l}]
 
     emptyLeaf :: Leaf
@@ -330,6 +338,7 @@ runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy 
       SaveAvailableIssues -> log "SaveAvailableIssues" "Saving all Issues to output directory." >> saveAllIssues
       GeneratePDF ls -> log "GeneratePDF" "Running Pandoc." >> runPandoc ls
       GetLinkedFile location name url -> log "GetLinkedFile" ("Downloading: " <> name <> ".") >> runGetLinked location name url
+      CloneRepo commitHash -> cloneRepoGH commitHash
 
     log :: String -> String -> Eff GHStack ()
     log s = logS ["runGHAppy", s]
@@ -351,6 +360,20 @@ runLogger = interpret go
       LogS env msg -> do
         lEnv <- asks logEnvironment
         sendM $ runKatipT lEnv $ logMsg (Namespace $ fromString <$> env) InfoS (logStr msg)
+
+cloneRepoGH :: forall effs. EffGH effs => CommitHash -> Eff effs ()
+cloneRepoGH commitHash = do
+  Settings {outputDirectory, repository} <- ask
+
+  logS ["runGHAppy", "CloneRepo"] (printf "cloning repo: %s ..." repository)
+
+  let repoDir = outputDirectory </> repoName repository
+
+  sendM $ Shell.run do
+    shell (printf "git clone git@github.com:%s %s" repository repoDir)
+    shell (printf "cd %s && git checkout %s" repoDir commitHash)
+
+  logS ["runGHAppy", "CloneRepo"] "Completed cloning of repo."
 
 -- | Creates all the necessary directories
 createDirs :: Members '[Reader Settings, IO] effs => Eff effs ()
@@ -397,41 +420,41 @@ makeRequestBS url =
     initReq <- parseRequest url
     getResponseBody <$> httpBS initReq
 
--- Add information about all the files and their checksums along with the commit hash.
-addCheckSums :: forall effs. EffGH effs => CommitHash -> [FilePath] -> Eff (Writer [Leaf] ': effs) ()
-addCheckSums commitHash files = do
-  Settings {repository} <- ask
+addCheckSums :: forall effs. EffGH effs => Integer -> IssueN -> CheckSumInfo -> Eff (Writer [Leaf] ': effs) ()
+addCheckSums level issueN CheckSumInfo {..} = do
+  Settings {outputDirectory, repository} <- ask
 
   logS ["runGHAppy", "AddCheckSumInfo"] (printf "commit hash: %s, files: %s" commitHash (show files))
-  fileHashes <- mapM (getHashOfGHFile commitHash) files
 
-  let checkSumTemplate :: String
-      checkSumTemplate =
-        unlines $
-          intersperse
-            ""
-            [ "## Information"
-            , printf
-                "MLabs analysed the validators and minting scripts from the github.com/[%s](https://github.com/%s)) repository starting at commit `%s`."
-                repository
-                repository
-                commitHash
-            , "## Audited Files Checksums"
-            , printf
-                "The following checksums are those of files captured by commit `%s`: and were generate using following haskell library:"
-                (take 7 commitHash)
-            , "```\nSHA==1.6.4.4\n```"
-            , "The checksums are:"
-            , "```"
-            ]
-            ++ zipWith makeFileCheckSumMD fileHashes files
-            ++ ["```", ""]
+  let repoDir = outputDirectory </> repoName repository
+      repoCloned = any isDirectory files
 
-  tell [Leaf {preamble = [checkSumTemplate], level = 1, issueN = Nothing}]
+  (allFiles, fileHashes) <-
+    if repoCloned
+      then sendM (getAllFiles $ map (repoDir </>) files) >>= (\allFiles -> (allFiles,) <$> mapM getHashOfFileLocal allFiles)
+      else (files,) <$> mapM (getHashOfFileGH commitHash) files
+
+  let checkSumTemplate :: Text
+      checkSumTemplate = Text.pack $ unlines $ ["```"] ++ zipWith formatChecksum fileHashes (if repoCloned then map removeRepoPath allFiles else allFiles) ++ ["```"]
+
+      updatedIssue :: Map IssueN Issue -> Map IssueN Issue
+      updatedIssue =
+        M.update
+          ( \issue ->
+              Just $
+                issue
+                  { content = unpack $ Text.replace "INCLUDE CheckSum" checkSumTemplate (pack $ content issue)
+                  }
+          )
+          issueN
+
+  modify (Issues . updatedIssue . unIssues)
+
+  tell [Leaf {preamble = mempty, level = level, issueN = Just issueN}]
 
 -- given a commithash and a filePath, get the specified file from the github repository and compute the hash of it.
-getHashOfGHFile :: forall effs. EffGH effs => CommitHash -> FilePath -> Eff effs String
-getHashOfGHFile commitHash filePath = do
+getHashOfFileGH :: forall effs. EffGH effs => CommitHash -> FilePath -> Eff effs String
+getHashOfFileGH commitHash filePath = do
   Settings {repository} <- ask
 
   let rawFileUrl =
@@ -442,6 +465,9 @@ getHashOfGHFile commitHash filePath = do
           filePath
   filecontent <- makeRequestBS rawFileUrl
   return (showDigest $ sha256 $ fromStrict filecontent)
+
+getHashOfFileLocal :: forall effs. EffGH effs => FilePath -> Eff effs String
+getHashOfFileLocal file = showDigest . sha256 . fromStrict <$> sendM (BS.readFile file)
 
 -- | GHAppy pulls all the issues from the GitHub repository.
 pullIssuesImpl :: forall effs. EffGH effs => Eff effs Issues
@@ -608,6 +634,3 @@ isOpen = Predicate $ \Issue {..} -> status == Open
 -- | Predicate for issues that have only a specific label.
 hasOnlyLabel :: String -> Predicate Issue
 hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
-
-makeFileCheckSumMD :: String -> FilePath -> String
-makeFileCheckSumMD fileHash = printf "%s...%s  %s" (take 4 fileHash) (drop 60 fileHash)

@@ -65,3 +65,12 @@ instance FromJSON Entry
 instance ToJSON Entry
 
 type CommitHash = String
+
+data CheckSumInfo = CheckSumInfo
+  { commitHash :: CommitHash
+  , files :: [FilePath]
+  }
+  deriving stock (Show, Eq, Generic)
+
+instance FromJSON CheckSumInfo
+instance ToJSON CheckSumInfo
