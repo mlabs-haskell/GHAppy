@@ -2,6 +2,8 @@ module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.Freer (Eff, Member)
+import qualified Data.Text as T
+
 import GHAppy
 import GHAppy.OptParser (gHAppyOpt)
 import System.FilePath ((<.>))
@@ -19,8 +21,8 @@ main = do
       let logo = "MLabs-logo-cropped" <.> "jpg"
       let logoCropped = "MLabs-logo" <.> "jpg"
       let linkedFiles = "https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/"
-      getLinkedFile ImagesDir logo (linkedFiles <> logo)
-      getLinkedFile ImagesDir logoCropped (linkedFiles <> logoCropped)
+      getLinkedFile ImagesDir logo (linkedFiles <> T.pack logo)
+      getLinkedFile ImagesDir logoCropped (linkedFiles <> T.pack logoCropped)
       -- Download all the issues
       pullIssues
       saveAvailableIssues

@@ -3,9 +3,9 @@ module GHAppy.YamlInterface (runYamlInterface) where
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Freer
-import Data.Char
 import Data.Foldable
 import Data.Functor.Contravariant
+import qualified Data.Text as T
 import Data.Yaml
 import GHAppy (Composer, GHAppyAct, GHStack)
 import qualified GHAppy as GH
@@ -52,17 +52,17 @@ filterToPredicate = \case
 
 gHAppyInstrToEff :: GHAppyInstruction -> Eff (GHAppyAct ': GHStack) ()
 gHAppyInstrToEff = \case
-  GetLinkedFile {..} -> GH.getLinkedFile (toStdLocation location) name gh'link
+  GetLinkedFile {..} -> GH.getLinkedFile (toStdLocation location) (T.unpack name) gh'link
   where
-    toStdLocation :: String -> GH.Location
-    toStdLocation s = case toLower <$> s of
+    toStdLocation :: T.Text -> GH.Location
+    toStdLocation s = case T.toLower s of
       "linkedfiles" -> GH.LinkedFilesDir
       "images" -> GH.ImagesDir
       "output" -> GH.OutputDir
       _ ->
         error $
           unlines
-            [ "Unknown location: " <> s
+            [ "Unknown location: " <> T.unpack s
             , "Useable Locations are:"
             , " * LinkedFiles"
             , " * Images"
@@ -83,9 +83,9 @@ instance FromJSON YamlInterface where
   parseJSON _ = mempty
 
 data GHAppyInstruction = GetLinkedFile
-  { location :: String
-  , name :: String
-  , gh'link :: String
+  { location :: T.Text
+  , name :: T.Text
+  , gh'link :: T.Text
   }
   deriving stock (Eq, Show, Generic)
 
@@ -101,11 +101,11 @@ instance FromJSON GHAppyInstruction where
 data ComposerInstruction
   = RawMd
       { level :: Integer
-      , link :: String
+      , link :: T.Text
       }
   | Header
       { level :: Integer
-      , text :: String
+      , text :: T.Text
       }
   | Issue
       { level :: Integer
@@ -162,7 +162,7 @@ instance FromJSON ComposerInstruction where
   parseJSON _ = mempty
 
 data Filter
-  = HasLabel String
+  = HasLabel T.Text
   | IsOpen Bool
   deriving stock (Eq, Show, Generic)
 

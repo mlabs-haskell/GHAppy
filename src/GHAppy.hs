@@ -150,18 +150,20 @@ import Data.Aeson
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (ByteString)
 import qualified Data.ByteString.Lazy.Internal as LB
-import Data.Char (isDigit)
+
+--import Data.Char (isDigit)
 import Data.Functor.Contravariant (Predicate (Predicate), getPredicate)
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.String (IsString (fromString))
-import Data.Text (unpack)
+
+--import Data.String (IsString (fromString))
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as ENC
+import qualified Data.Text.IO as TIO
 import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, runKatipT)
 
 import Data.Maybe (fromMaybe)
 
-import qualified Data.ByteString as B
 import Network.HTTP.Conduit (Request (requestHeaders), setQueryString)
 import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
 
@@ -171,18 +173,21 @@ import System.IO.Error (isAlreadyExistsError)
 
 import qualified GHAppy.Types as T
 
+import Data.Char (isDigit)
+import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8)
 import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
-  { apiKey :: String
+  { apiKey :: T.Text
   , outputDirectory :: FilePath
   , linkedFilesDirectory :: FilePath
   , imagesDirectory :: FilePath
-  , outputFile :: String
-  , repository :: String
-  , userAgent :: String
-  , pandocTemplateUrl :: String
+  , outputFile :: T.Text
+  , repository :: T.Text
+  , userAgent :: T.Text
+  , pandocTemplateUrl :: T.Text
   , preambleLocation :: FilePath
   , logEnvironment :: LogEnv
   }
@@ -205,10 +210,10 @@ data Status = Open | Closed
 
 -- | Issue is the standard document GHAppy works with. It is a simpler version of `Entry` and the reasoning behind decoupling the two is both a matter of history and convenience. In future versions this could be replaced with Entry directly.
 data Issue = Issue
-  { content :: String
+  { content :: T.Text
   , number :: Integer
-  , title :: String
-  , labels :: [String]
+  , title :: T.Text
+  , labels :: [T.Text]
   , status :: Status
   }
   deriving stock (Show, Eq)
@@ -221,7 +226,7 @@ data Leaf = Leaf
     issueN :: Maybe IssueN
   , -- | The Preamble is prepended to an included leaf. We use this to either prepend some custom
     -- text to an issue, or to create a non issue entry.
-    preamble :: [String]
+    preamble :: [T.Text]
   , -- | The level of a leaf represents by how many levels we will bump the headers it contains.
     -- '0' means none.
     level :: Integer
@@ -240,9 +245,9 @@ data Logger a where
   -- | Standard Info Log.
   LogS ::
     -- | Log Environment
-    [String] ->
+    [T.Text] ->
     -- | Log Message
-    String ->
+    T.Text ->
     -- | Log Effect
     Logger ()
 
@@ -259,7 +264,7 @@ data GHAppyAct a where
   -- | Uses Pandoc to generate the final report.
   GeneratePDF :: [Leaf] -> GHAppyAct ()
   -- | Get files to be linked by Pandoc.
-  GetLinkedFile :: Location -> FilePath -> String -> GHAppyAct ()
+  GetLinkedFile :: Location -> FilePath -> T.Text -> GHAppyAct ()
 
 makeEffect ''GHAppyAct
 
@@ -273,9 +278,9 @@ data Composer a where
   -- specific amount.
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
   -- | Adds a header at specific level.
-  AddHeader :: Integer -> String -> Composer ()
+  AddHeader :: Integer -> T.Text -> Composer ()
   -- | Add raw markdown file from GitHub raw file url, at a specific level.
-  AddRawMd :: Integer -> String -> Composer ()
+  AddRawMd :: Integer -> T.Text -> Composer ()
 
 makeEffect ''Composer
 
@@ -301,7 +306,7 @@ compose = reinterpret go
       AddAllPagesThat lvl p ->
         let f = fmap ((\n -> emptyLeaf {issueN = n, level = lvl}) . Just . fst) . M.toList . M.filter (getPredicate p) . unIssues
          in (get >>= tell . f)
-      AddHeader lvl str -> tell [emptyLeaf {preamble = [replicate (fromEnum lvl) '#' <> " " <> str]}]
+      AddHeader lvl str -> tell [emptyLeaf {preamble = [T.pack $ replicate (fromEnum lvl) '#' <> " " <> T.unpack str]}]
       AddRawMd lvl url -> tellJust lvl =<< makeRequestUTF8 url
     tellJust l s = tell [emptyLeaf {preamble = [s], level = l}]
 
@@ -320,9 +325,9 @@ runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy 
       PullIssues -> log "PullIssues" "Pulling Issues from GitHub." >> pullIssuesImpl
       SaveAvailableIssues -> log "SaveAvailableIssues" "Saving all Issues to output directory." >> saveAllIssues
       GeneratePDF ls -> log "GeneratePDF" "Running Pandoc." >> runPandoc ls
-      GetLinkedFile location name url -> log "GetLinkedFile" ("Downloading: " <> name <> ".") >> runGetLinked location name url
+      GetLinkedFile location name url -> log "GetLinkedFile" ("Downloading: " <> T.pack name <> ".") >> runGetLinked location name (T.unpack url)
 
-    log :: String -> String -> Eff GHStack ()
+    log :: T.Text -> T.Text -> Eff GHStack ()
     log s = logS ["runGHAppy", s]
 
 runGetLinked :: Location -> String -> String -> Eff GHStack ()
@@ -332,7 +337,7 @@ runGetLinked location name url = do
     OutputDir -> asks outputDirectory
     LinkedFilesDir -> asks linkedFilesDirectory
     ImagesDir -> asks imagesDirectory
-  sendM $ B.writeFile (path </> name) contents
+  sendM $ BS.writeFile (path </> name) contents
 
 runLogger :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Eff (Logger ': effs) a -> Eff effs a
 runLogger = interpret go
@@ -341,7 +346,7 @@ runLogger = interpret go
     go = \case
       LogS env msg -> do
         lEnv <- asks logEnvironment
-        sendM $ runKatipT lEnv $ logMsg (Namespace $ fromString <$> env) InfoS (logStr msg)
+        sendM $ runKatipT lEnv $ logMsg (Namespace env) InfoS (logStr msg)
 
 -- | Creates all the necessary directories
 createDirs :: Members '[Reader Settings, IO] effs => Eff effs ()
@@ -367,19 +372,19 @@ saveIssue i = do
   return fileName
 
 formatIssue :: Issue -> String
-formatIssue Issue {..} = "# " <> title <> "\n\n" <> bumpHeaders 1 content <> "\n"
+formatIssue Issue {..} = "# " <> T.unpack title <> "\n\n" <> bumpHeaders 1 (T.unpack content) <> "\n"
 
 -- | Saves all the issues available.
 saveAllIssues :: Members '[Reader Settings, State Issues, IO] effs => Eff effs [FilePath]
 saveAllIssues = get >>= fmap M.elems . traverse saveIssue . unIssues
 
 -- | Makes a GET requests and returns the body as String. The encoding of the ByteString must be UTF8.
-makeRequestUTF8 :: LastMember IO eff => String -> Eff eff String
+makeRequestUTF8 :: LastMember IO eff => Text -> Eff eff Text
 makeRequestUTF8 url = do
   response <- sendM $ do
-    initReq <- parseRequest url
+    initReq <- parseRequest $ T.unpack url
     getResponseBody <$> httpBS initReq
-  return $ either (error . show) unpack . ENC.decodeUtf8' $ response
+  return $ either (error . show) id $ ENC.decodeUtf8' response
 
 -- | Makes a GET requests and save the content to a file. Basically download.
 makeRequestBS :: LastMember IO eff => String -> Eff eff ByteString
@@ -399,19 +404,19 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
     -- Pulls page 'n' with 100 issues.
     pullPage :: forall effs. EffGH effs => Int -> Eff effs Issues
     pullPage n = do
-      logS ["runGHAppy", "pullPage"] $ "Pulling issues from page " <> show n <> "."
+      logS ["runGHAppy", "pullPage"] $ T.pack $ "Pulling issues from page " <> show n <> "."
       Settings {..} <- ask
 
       response <- sendM $ do
         -- Initialise requests
-        initReq <- parseRequest $ "https://api.github.com/repos/" <> repository <> "/issues"
+        initReq <- parseRequest $ "https://api.github.com/repos/" <> T.unpack repository <> "/issues"
         -- Add headers
         let reqIssues =
               initReq
                 { requestHeaders =
                     [ ("Accept", "application/vnd.github+json")
-                    , ("Authorization", fromString $ "Bearer " <> apiKey)
-                    , ("User-Agent", fromString userAgent)
+                    , ("Authorization", encodeUtf8 $ "Bearer " <> apiKey)
+                    , ("User-Agent", encodeUtf8 userAgent)
                     , ("X-GitHub-Api-Version", "2022-11-28")
                     ]
                 }
@@ -422,14 +427,14 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
                 , ("filter", Just "all")
                 , ("state", Just "all")
                 , ("direction", Just "asc")
-                , ("page", Just $ fromString $ show n)
+                , ("page", Just $ (encodeUtf8 . T.pack . show) n)
                 ]
                 reqIssues
         getResponseBody <$> httpBS reqIssues'
       case (decode @[T.Entry]) $ LB.packBytes $ BS.unpack response of
         Nothing -> do
           logS ["getResponseBody", "Decode"] "Decoding failed! Here's what I received when pulling the issues:"
-          logS ["getResponseBody", "Decode"] $ show $ LB.packBytes $ BS.unpack response
+          logS ["getResponseBody", "Decode"] $ ENC.decodeUtf8 response
           error "Cannot decode body! Something has gone fundamentally wrong."
         Just entries -> do
           let issues = fmap toIssue entries
@@ -439,15 +444,15 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
     toIssue entry =
       ( T.number entry
       , Issue
-          { title = unpack $ T.title entry
-          , content = unpack $ fromMaybe "" $ T.body entry
-          , labels = (\(T.Label x) -> unpack x) <$> T.labels entry
+          { title = T.title entry
+          , content = fromMaybe "" $ T.body entry
+          , labels = (\(T.Label x) -> x) <$> T.labels entry
           , number = T.number entry
           , status = (\case "open" -> Open; _ -> Closed) $ T.state entry
           }
       )
 
-leafToMDPP :: forall effs. Members '[State Issues] effs => Leaf -> Eff effs String
+leafToMDPP :: forall effs. Members '[State Issues] effs => Leaf -> Eff effs T.Text
 leafToMDPP Leaf {..} = do
   (Issues s) <- get
   formattedContent <- case issueN of
@@ -456,12 +461,12 @@ leafToMDPP Leaf {..} = do
     Just no -> do
       let err = error . ("Cannot find issue: " <>) . show
       let issue = fromMaybe (err no) $ s M.!? no
-      let content = unlines preamble <> formatIssue issue
-      let bumpedContent = bumpHeaders level content
+      let content = T.append (T.unlines preamble) (T.pack $ formatIssue issue)
+      let bumpedContent = bumpHeaders level (T.unpack content)
       replaceNumbers bumpedContent
 
-  let bumpedPreamble = bumpHeaders level $ unlines preamble
-  pure $ bumpedPreamble <> formattedContent
+  let bumpedPreamble = bumpHeaders level $ T.unpack $ T.unlines preamble
+  pure $ T.pack (bumpedPreamble <> formattedContent)
 
 -- | Replace issue numbers with title of the issue.
 replaceNumbers :: forall effs. Member (State Issues) effs => String -> Eff effs String
@@ -471,7 +476,7 @@ replaceNumbers = \case
     case slurpNumber xs of
       Just (no, after) -> do
         let issueTitle = title $ db M.! no
-        (("_" <> issueTitle <> "_") <>) <$> replaceNumbers after
+        (("_" <> T.unpack issueTitle <> "_") <>) <$> replaceNumbers after
       Nothing -> ('#' :) <$> replaceNumbers xs
   x : xs -> (x :) <$> replaceNumbers xs
   [] -> pure []
@@ -506,29 +511,29 @@ runPandoc fs = do
   pTplFl <- getPandocTemplateLocation
   savePandocTemplate
   preamble <- getPreamble
-  let mdFile = "." </> outputDirectory </> outputFile <.> "md"
-  let outFileP = "." </> outputDirectory </> outputFile <.> "pdf"
-  outContent <- (preamble <>) . unlines <$> traverse leafToMDPP fs
-  sendM $ writeFile mdFile outContent
+  let mdFile = "." </> outputDirectory </> T.unpack outputFile <.> "md"
+  let outFileP = "." </> outputDirectory </> T.unpack outputFile <.> "pdf"
+  outContent <- (preamble <>) . T.unlines <$> traverse leafToMDPP fs
+  sendM $ TIO.writeFile mdFile outContent
   sendM $
     convertWithOpts $
       defaultOpts
-        { optFrom = Just $ fromString "markdown"
-        , optTo = Just $ fromString "pdf"
+        { optFrom = Just $ T.pack "markdown"
+        , optTo = Just $ T.pack "pdf"
         , optOutputFile = Just outFileP
         , optInputFiles = Just [mdFile]
         , optTemplate = Just pTplFl
         }
   sendM $ removeFile pTplFl
 
-getPreamble :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs String
-getPreamble = asks preambleLocation >>= sendM . readFile >>= \c -> pure . unlines $ ["---", c, "---"]
+getPreamble :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs T.Text
+getPreamble = asks preambleLocation >>= sendM . TIO.readFile >>= \c -> pure . T.unlines $ ["---", c, "---"]
 
 getPandocTemplate :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs ByteString
 getPandocTemplate = do
   tUrl <- asks pandocTemplateUrl
   sendM $ do
-    initReq <- parseRequest tUrl
+    initReq <- parseRequest $ T.unpack tUrl
     getResponseBody <$> httpBS initReq
 
 savePandocTemplate :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs ()
@@ -543,7 +548,7 @@ getPandocTemplateLocation = asks outputDirectory >>= \d -> pure $ "." </> d </> 
 -- Predicates ------------------------------------------------------------------------
 
 -- | Predicate for issues that have a specific label.
-hasLabel :: String -> Predicate Issue
+hasLabel :: T.Text -> Predicate Issue
 hasLabel s = Predicate $ \Issue {..} -> s `elem` labels
 
 -- | Predicate for open issue.
@@ -551,5 +556,5 @@ isOpen :: Predicate Issue
 isOpen = Predicate $ \Issue {..} -> status == Open
 
 -- | Predicate for issues that have only a specific label.
-hasOnlyLabel :: String -> Predicate Issue
+hasOnlyLabel :: T.Text -> Predicate Issue
 hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
