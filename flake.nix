@@ -73,6 +73,7 @@
                 (pkgs.haskell.lib.addBuildTools drv
                   (additionalHaskellPckgs ++ additionalPckgs)
                 );
+              # compiler-nix-name = "ghc925";
             };
         in
         {
