@@ -306,7 +306,7 @@ compose = reinterpret go
       AddAllPagesThat lvl p ->
         let f = fmap ((\n -> emptyLeaf {issueN = n, level = lvl}) . Just . fst) . M.toList . M.filter (getPredicate p) . unIssues
          in (get >>= tell . f)
-      AddHeader lvl str -> tell [emptyLeaf {preamble = [T.pack $ replicate (fromEnum lvl) '#' <> " " <> T.unpack str]}]
+      AddHeader lvl str -> tell [emptyLeaf {preamble = [T.pack (replicate (fromEnum lvl) '#') <> " " <> str]}]
       AddRawMd lvl url -> tellJust lvl =<< makeRequestUTF8 url
     tellJust l s = tell [emptyLeaf {preamble = [s], level = l}]
 
