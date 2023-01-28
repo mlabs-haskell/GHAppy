@@ -18,8 +18,8 @@ main = do
       -- Set up necessary directories
       setUpDirs
       -- Download additional images required.
-      let logo = T.pack $ "MLabs-logo-cropped" <.> "jpg"
-      let logoCropped = T.pack $ "MLabs-logo" <.> "jpg"
+      let logo = "MLabs-logo-cropped" <.> "jpg"
+      let logoCropped = "MLabs-logo" <.> "jpg"
       let linkedFiles = "https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/"
       getLinkedFile ImagesDir logo (linkedFiles <> T.pack logo)
       getLinkedFile ImagesDir logoCropped (linkedFiles <> T.pack logoCropped)

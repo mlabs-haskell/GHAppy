@@ -26,7 +26,7 @@ common settings
     , lens-aeson
     , mtl
     , optparse-applicative
-    , pandoc
+    , pandoc                >=2.19.0 && <3
     , text
     , yaml
 

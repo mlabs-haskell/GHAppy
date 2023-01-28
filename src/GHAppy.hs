@@ -146,48 +146,40 @@ import Control.Monad.Freer.State (State, evalState, get, modify)
 import Control.Monad.Freer.TH (makeEffect)
 import Control.Monad.Freer.Writer (Writer, runWriter, tell)
 import Control.Monad.Writer (unless)
-import Data.Aeson
+import Data.Aeson (decode)
 import qualified Data.ByteString as BS
 import Data.ByteString.Internal (ByteString)
 import qualified Data.ByteString.Lazy.Internal as LB
-
---import Data.Char (isDigit)
+import Data.Char (isDigit)
 import Data.Functor.Contravariant (Predicate (Predicate), getPredicate)
 import Data.Map (Map)
 import qualified Data.Map as M
-
---import Data.String (IsString (fromString))
+import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Text.Encoding as ENC
 import qualified Data.Text.IO as TIO
 import Katip (LogEnv, Namespace (Namespace), Severity (InfoS), logMsg, logStr, runKatipT)
-
-import Data.Maybe (fromMaybe)
-
 import Network.HTTP.Conduit (Request (requestHeaders), setQueryString)
 import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
-
 import System.Directory (createDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
 import System.IO.Error (isAlreadyExistsError)
+import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
 import qualified GHAppy.Types as T
 
-import Data.Char (isDigit)
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8)
-import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
-
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
-  { apiKey :: T.Text
+  { apiKey :: Text
   , outputDirectory :: FilePath
   , linkedFilesDirectory :: FilePath
   , imagesDirectory :: FilePath
-  , outputFile :: T.Text
-  , repository :: T.Text
-  , userAgent :: T.Text
-  , pandocTemplateUrl :: T.Text
+  , outputFile :: Text
+  , repository :: Text
+  , userAgent :: Text
+  , pandocTemplateUrl :: Text
   , preambleLocation :: FilePath
   , logEnvironment :: LogEnv
   }
@@ -210,10 +202,10 @@ data Status = Open | Closed
 
 -- | Issue is the standard document GHAppy works with. It is a simpler version of `Entry` and the reasoning behind decoupling the two is both a matter of history and convenience. In future versions this could be replaced with Entry directly.
 data Issue = Issue
-  { content :: T.Text
+  { content :: Text
   , number :: Integer
-  , title :: T.Text
-  , labels :: [T.Text]
+  , title :: Text
+  , labels :: [Text]
   , status :: Status
   }
   deriving stock (Show, Eq)
@@ -226,7 +218,7 @@ data Leaf = Leaf
     issueN :: Maybe IssueN
   , -- | The Preamble is prepended to an included leaf. We use this to either prepend some custom
     -- text to an issue, or to create a non issue entry.
-    preamble :: [T.Text]
+    preamble :: [Text]
   , -- | The level of a leaf represents by how many levels we will bump the headers it contains.
     -- '0' means none.
     level :: Integer
@@ -245,9 +237,9 @@ data Logger a where
   -- | Standard Info Log.
   LogS ::
     -- | Log Environment
-    [T.Text] ->
+    [Text] ->
     -- | Log Message
-    T.Text ->
+    Text ->
     -- | Log Effect
     Logger ()
 
@@ -264,7 +256,7 @@ data GHAppyAct a where
   -- | Uses Pandoc to generate the final report.
   GeneratePDF :: [Leaf] -> GHAppyAct ()
   -- | Get files to be linked by Pandoc.
-  GetLinkedFile :: Location -> FilePath -> T.Text -> GHAppyAct ()
+  GetLinkedFile :: Location -> FilePath -> Text -> GHAppyAct ()
 
 makeEffect ''GHAppyAct
 
@@ -278,9 +270,9 @@ data Composer a where
   -- specific amount.
   AddAllPagesThat :: Integer -> Predicate Issue -> Composer ()
   -- | Adds a header at specific level.
-  AddHeader :: Integer -> T.Text -> Composer ()
+  AddHeader :: Integer -> Text -> Composer ()
   -- | Add raw markdown file from GitHub raw file url, at a specific level.
-  AddRawMd :: Integer -> T.Text -> Composer ()
+  AddRawMd :: Integer -> Text -> Composer ()
 
 makeEffect ''Composer
 
@@ -325,19 +317,19 @@ runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy 
       PullIssues -> log "PullIssues" "Pulling Issues from GitHub." >> pullIssuesImpl
       SaveAvailableIssues -> log "SaveAvailableIssues" "Saving all Issues to output directory." >> saveAllIssues
       GeneratePDF ls -> log "GeneratePDF" "Running Pandoc." >> runPandoc ls
-      GetLinkedFile location name url -> log "GetLinkedFile" ("Downloading: " <> T.pack name <> ".") >> runGetLinked location name (T.unpack url)
+      GetLinkedFile location name url -> log "GetLinkedFile" ("Downloading: " <> T.pack name <> ".") >> runGetLinked location (T.pack name) url
 
-    log :: T.Text -> T.Text -> Eff GHStack ()
+    log :: Text -> Text -> Eff GHStack ()
     log s = logS ["runGHAppy", s]
 
-runGetLinked :: Location -> String -> String -> Eff GHStack ()
+runGetLinked :: Location -> Text -> Text -> Eff GHStack ()
 runGetLinked location name url = do
   contents <- makeRequestBS url
   path <- case location of
     OutputDir -> asks outputDirectory
     LinkedFilesDir -> asks linkedFilesDirectory
     ImagesDir -> asks imagesDirectory
-  sendM $ BS.writeFile (path </> name) contents
+  sendM $ BS.writeFile (path </> T.unpack name) contents
 
 runLogger :: (Members '[Reader Settings, IO] effs, LastMember IO effs) => Eff (Logger ': effs) a -> Eff effs a
 runLogger = interpret go
@@ -368,17 +360,17 @@ saveIssue :: Members '[Reader Settings, IO] effs => Issue -> Eff effs FilePath
 saveIssue i = do
   let ticketContent = formatIssue i
   fileName <- fst <$> filePath i
-  send $ writeFile fileName ticketContent
+  send $ writeFile fileName $ T.unpack ticketContent
   return fileName
 
-formatIssue :: Issue -> String
-formatIssue Issue {..} = "# " <> T.unpack title <> "\n\n" <> bumpHeaders 1 (T.unpack content) <> "\n"
+formatIssue :: Issue -> Text
+formatIssue Issue {..} = "# " <> title <> "\n\n" <> bumpHeaders 1 content <> "\n"
 
 -- | Saves all the issues available.
 saveAllIssues :: Members '[Reader Settings, State Issues, IO] effs => Eff effs [FilePath]
 saveAllIssues = get >>= fmap M.elems . traverse saveIssue . unIssues
 
--- | Makes a GET requests and returns the body as String. The encoding of the ByteString must be UTF8.
+-- | Makes a GET requests and returns the body as Text. The encoding of the ByteString must be UTF8.
 makeRequestUTF8 :: LastMember IO eff => Text -> Eff eff Text
 makeRequestUTF8 url = do
   response <- sendM $ do
@@ -387,10 +379,10 @@ makeRequestUTF8 url = do
   return $ either (error . show) id $ ENC.decodeUtf8' response
 
 -- | Makes a GET requests and save the content to a file. Basically download.
-makeRequestBS :: LastMember IO eff => String -> Eff eff ByteString
+makeRequestBS :: LastMember IO eff => Text -> Eff eff ByteString
 makeRequestBS url =
   sendM $ do
-    initReq <- parseRequest url
+    initReq <- parseRequest $ T.unpack url
     getResponseBody <$> httpBS initReq
 
 -- | GHAppy pulls all the issues from the GitHub repository.
@@ -452,7 +444,7 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
           }
       )
 
-leafToMDPP :: forall effs. Members '[State Issues] effs => Leaf -> Eff effs T.Text
+leafToMDPP :: forall effs. Members '[State Issues] effs => Leaf -> Eff effs Text
 leafToMDPP Leaf {..} = do
   (Issues s) <- get
   formattedContent <- case issueN of
@@ -461,48 +453,47 @@ leafToMDPP Leaf {..} = do
     Just no -> do
       let err = error . ("Cannot find issue: " <>) . show
       let issue = fromMaybe (err no) $ s M.!? no
-      let content = T.append (T.unlines preamble) (T.pack $ formatIssue issue)
-      let bumpedContent = bumpHeaders level (T.unpack content)
-      replaceNumbers bumpedContent
+      let content = T.append (T.unlines preamble) (formatIssue issue)
+      let bumpedContent = bumpHeaders level content
+      replaceNumbers $ T.uncons bumpedContent
 
-  let bumpedPreamble = bumpHeaders level $ T.unpack $ T.unlines preamble
-  pure $ T.pack (bumpedPreamble <> formattedContent)
+  let bumpedPreamble = bumpHeaders level $ T.unlines preamble
+  pure (bumpedPreamble <> formattedContent)
 
 -- | Replace issue numbers with title of the issue.
-replaceNumbers :: forall effs. Member (State Issues) effs => String -> Eff effs String
+replaceNumbers :: forall effs. Member (State Issues) effs => Maybe (Char, Text) -> Eff effs Text
 replaceNumbers = \case
-  '#' : xs -> do
+  Just ('#', xs) -> do
     db <- unIssues <$> get
     case slurpNumber xs of
       Just (no, after) -> do
         let issueTitle = title $ db M.! no
-        (("_" <> T.unpack issueTitle <> "_") <>) <$> replaceNumbers after
-      Nothing -> ('#' :) <$> replaceNumbers xs
-  x : xs -> (x :) <$> replaceNumbers xs
-  [] -> pure []
+        fmap (T.append ("_" <> issueTitle <> "_")) <$> replaceNumbers $ T.uncons after
+      Nothing -> fmap (T.cons '#') <$> replaceNumbers $ T.uncons xs
+  Just (x, xs) -> fmap (T.cons x) <$> replaceNumbers $ T.uncons xs
+  _ -> pure ""
   where
-    slurpNumber :: String -> Maybe (Integer, String)
+    slurpNumber :: Text -> Maybe (Integer, Text)
     slurpNumber str = do
-      let n = takeWhile isDigit str
-      let l = length n
+      let n = T.takeWhile isDigit str
+      let l = T.length n
       ( if l > 0
           then
             ( do
-                let after = drop l str
-                let no = read @Integer n
+                let after = T.drop l str
+                let no = read @Integer $ T.unpack n
                 Just (no, after)
             )
           else Nothing
         )
 
-bumpHeaders :: Integer -> String -> String
+bumpHeaders :: Integer -> Text -> Text
 bumpHeaders l xs = do
-  l <- f <$> lines xs
-  unlines [l]
+  T.unlines $ f <$> T.lines xs
   where
-    addSym = replicate (fromEnum l) '#'
-    f x = case x of
-      '#' : _ -> addSym <> x
+    addSym = T.pack $ replicate (fromEnum l) '#'
+    f x = case T.uncons x of
+      Just ('#', _) -> addSym <> x
       _ -> x
 
 runPandoc :: forall effs. EffGH effs => [Leaf] -> Eff effs ()
@@ -526,7 +517,7 @@ runPandoc fs = do
         }
   sendM $ removeFile pTplFl
 
-getPreamble :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs T.Text
+getPreamble :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs Text
 getPreamble = asks preambleLocation >>= sendM . TIO.readFile >>= \c -> pure . T.unlines $ ["---", c, "---"]
 
 getPandocTemplate :: (Members '[Reader Settings] effs, LastMember IO effs) => Eff effs ByteString
@@ -548,7 +539,7 @@ getPandocTemplateLocation = asks outputDirectory >>= \d -> pure $ "." </> d </> 
 -- Predicates ------------------------------------------------------------------------
 
 -- | Predicate for issues that have a specific label.
-hasLabel :: T.Text -> Predicate Issue
+hasLabel :: Text -> Predicate Issue
 hasLabel s = Predicate $ \Issue {..} -> s `elem` labels
 
 -- | Predicate for open issue.
@@ -556,5 +547,5 @@ isOpen :: Predicate Issue
 isOpen = Predicate $ \Issue {..} -> status == Open
 
 -- | Predicate for issues that have only a specific label.
-hasOnlyLabel :: T.Text -> Predicate Issue
+hasOnlyLabel :: Text -> Predicate Issue
 hasOnlyLabel s = Predicate $ \Issue {..} -> s `elem` labels && (length labels == 1)
