@@ -39,7 +39,7 @@ compInstrToEff :: (Member Composer effs) => ComposerInstruction -> Eff effs ()
 compInstrToEff = \case
   RawMd {..} -> GH.addRawMd level link
   Header {..} -> GH.addHeader level text
-  Issue {..} -> GH.addFile level number
+  Issue {..} -> GH.addFile level number remote
   -- fixme: newpage should be extended
   NewPage {} -> GH.addNewPage
   AllIssuesThat {..} -> GH.addAllPagesThat level (mconcat $ filterToPredicate <$> filters)
@@ -110,6 +110,7 @@ data ComposerInstruction
   | Issue
       { level :: Integer
       , number :: Integer
+      , remote :: Maybe String
       }
   | NewPage Integer
   | AllIssuesThat
@@ -140,10 +141,12 @@ instance FromJSON ComposerInstruction where
               innerObject <- o .: "Issue"
               le <- innerObject .: "level"
               nu <- innerObject .: "number"
+              re <- innerObject .: "remote"
               pure $
                 Issue
                   { level = le
                   , number = nu
+                  , remote = re
                   }
           )
       <|> ( do

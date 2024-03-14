@@ -35,8 +35,8 @@ auditReport = do
   addRawMd 0 "https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md"
 
   addHeader 1 "Contents" -- # Contents
-  addFile 1 1 -- # Contents -> ## Contents
-  addFile 1 6
+  addFile 1 1 Nothing -- # Contents -> ## Contents
+  addFile 1 6 Nothing
   addNewPage
 
   addHeader 1 "Reviews"

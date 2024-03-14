@@ -5,6 +5,6 @@ cabal run GHAppy -- \
 	-a $(cat ./token.txt) \
 	-o "out" \
 	-f "outFile" \
-	-r "mlabs-haskell/optim-onchain-audit" \
-	-u "cstml" \
+	-r "IndigoProtocol/smart-contracts-aiken" \
+	-u "IAmPara0x" \
 	-i ./example/report2.yaml

@@ -1,0 +1,125 @@
+Composer:
+
+  - RawMd:
+      level: 0 
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/disclaimer.md
+  
+  - Header: 
+      level: 1 
+      text: Contents
+    
+  - Issue:
+      level: 1
+      number: 123
+      remote: null
+
+  - RawMd:
+      level: 0
+      link: ./out/audit.md
+
+  - NewPage: 0
+
+  - Issue:
+      level: 1
+      number: 70
+      remote: IndigoProtocol/smart-contracts-testsuite
+
+  - Issue:
+      level: 1
+      number: 64
+      remote: IndigoProtocol/smart-contracts-testsuite
+
+  - Issue:
+      level: 1
+      number: 153
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 178
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 59
+      remote: IndigoProtocol/smart-contracts-testsuite
+
+  - Issue:
+      level: 1
+      number: 61
+      remote: IndigoProtocol/smart-contracts-testsuite
+
+  - RawMd:
+      level: 0
+      link: ./out/validator-section.md
+
+  - Issue:
+      level: 1
+      number: 143
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 142
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 160
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 164
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 162
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 147
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 146
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 134
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 144
+      remote: null
+
+  - Issue:
+      level: 1
+      number: 161
+      remote: null
+
+  - NewPage: 0
+
+  - RawMd:
+      level: 0
+      link: ./out/conclusion.md
+
+  - RawMd:
+      level: 0
+      link: ./out/Appendix.md
+
+GHAppy:
+  - GetLinkedFile:
+      location: Images
+      name: MLabs-logo.jpg
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo.jpg
+      
+  - GetLinkedFile:
+      location: Images
+      name: MLabs-logo-cropped.jpg 
+      link: https://raw.githubusercontent.com/mlabs-haskell/audit-report-template/master/linked-files/images/MLabs-logo-cropped.jpg

@@ -25,6 +25,7 @@ common settings
     , lens
     , lens-aeson
     , mtl
+    , network-uri
     , optparse-applicative
     , pandoc
     , text

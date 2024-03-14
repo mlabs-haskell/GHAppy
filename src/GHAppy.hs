@@ -49,8 +49,8 @@ auditReport = do
   addRawMd 0 \"https:\/\/raw.githubusercontent.com\/mlabs-haskell\/audit-report-template\/master\/linked-files\/disclaimer.md\"
 
   addHeader 1 \"Contents\"
-  addFile 1 1
-  addFile 1 6
+  addFile 1 1 Nothing
+  addFile 1 6 Nothing
   addNewPage
 
   addHeader 1 \"Reviews\"
@@ -164,6 +164,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as B
 import Network.HTTP.Conduit (Request (requestHeaders), setQueryString)
 import Network.HTTP.Simple (getResponseBody, httpBS, parseRequest)
+import Network.URI (isURI)
 
 import System.Directory (createDirectory, removeFile)
 import System.FilePath ((<.>), (</>))
@@ -171,7 +172,7 @@ import System.IO.Error (isAlreadyExistsError)
 
 import qualified GHAppy.Types as T
 
-import Text.Pandoc.App (convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
+import Text.Pandoc.App (Opt (..), convertWithOpts, defaultOpts, optFrom, optInputFiles, optOutputFile, optTemplate, optTo)
 
 -- | Used by GHAppy for necessary information.
 data Settings = Settings
@@ -266,7 +267,7 @@ makeEffect ''GHAppyAct
 -- | API for composing documents from issues.
 data Composer a where
   -- | Adds the Issue with a specific number to the composer.
-  AddFile :: Integer -> IssueN -> Composer ()
+  AddFile :: Integer -> IssueN -> Maybe String -> Composer ()
   -- | Adds an empty page.
   AddNewPage :: Composer ()
   -- | Adds all the issues that satisfy a predicate, bumping their headers by a
@@ -296,17 +297,57 @@ compose = reinterpret go
   where
     go :: forall effs a. EffGH effs => Composer a -> Eff (Writer [Leaf] ': effs) a
     go = \case
-      AddFile lvl no -> tell [emptyLeaf {issueN = Just no, level = lvl}]
+      AddFile lvl no Nothing -> tell [emptyLeaf {issueN = Just no, level = lvl}]
+      AddFile lvl no (Just remote) -> tellJust lvl =<< getIssueFromRemote remote no
       AddNewPage -> tell [emptyLeaf {preamble = ["\\newpage"]}]
       AddAllPagesThat lvl p ->
         let f = fmap ((\n -> emptyLeaf {issueN = n, level = lvl}) . Just . fst) . M.toList . M.filter (getPredicate p) . unIssues
          in (get >>= tell . f)
       AddHeader lvl str -> tell [emptyLeaf {preamble = [replicate (fromEnum lvl) '#' <> " " <> str]}]
-      AddRawMd lvl url -> tellJust lvl =<< makeRequestUTF8 url
+      AddRawMd lvl location -> tellJust lvl =<< getRawMd location
     tellJust l s = tell [emptyLeaf {preamble = [s], level = l}]
 
     emptyLeaf :: Leaf
     emptyLeaf = Leaf {issueN = Nothing, preamble = mempty, level = 0}
+
+getIssueFromRemote :: forall effs. EffGH effs => String -> IssueN -> Eff effs String
+getIssueFromRemote remote no = do
+  Settings {..} <- ask
+  response <- sendM $ do
+    -- Initialise requests
+    initReq <- parseRequest $ "https://api.github.com/repos/" <> remote <> "/issues" <> "/" <> show no
+
+    -- Add headers
+    let reqIssues =
+          initReq
+            { requestHeaders =
+                [ ("Accept", "application/vnd.github+json")
+                , ("Authorization", fromString $ "Bearer " <> apiKey)
+                , ("User-Agent", fromString userAgent)
+                , ("X-GitHub-Api-Version", "2022-11-28")
+                ]
+            }
+
+    let reqIssues' =
+          setQueryString
+            [ ("per_page", Just "100")
+            , ("filter", Just "all")
+            , ("state", Just "all")
+            , ("direction", Just "asc")
+            , ("page", Just $ fromString $ show (0 :: Integer))
+            ]
+            reqIssues
+    print @String (show initReq)
+    getResponseBody <$> httpBS reqIssues'
+
+  case (decode @T.Entry) $ LB.packBytes $ BS.unpack response of
+    Nothing -> do
+      logS ["getResponseBody", "Decode"] "Decoding failed! Here's what I received when pulling the issues:"
+      logS ["getResponseBody", "Decode"] $ show $ LB.packBytes $ BS.unpack response
+      error "Cannot decode body! Something has gone fundamentally wrong."
+    Just entries -> do
+      let issues = toIssue entries
+      pure $ formatIssue $ snd issues
 
 runGHAppy :: Settings -> Eff (GHAppyAct ': GHStack) a -> IO a
 runGHAppy s m = runM (evalState mempty (runReader s (runLogger (transformGHAppy m))))
@@ -369,6 +410,12 @@ saveIssue i = do
 formatIssue :: Issue -> String
 formatIssue Issue {..} = "# " <> title <> "\n\n" <> bumpHeaders 1 content <> "\n"
 
+getRawMd :: LastMember IO eff => String -> Eff eff String
+getRawMd location = do
+  if isURI location
+    then makeRequestUTF8 location
+    else sendM $ readFile location
+
 -- | Saves all the issues available.
 saveAllIssues :: Members '[Reader Settings, State Issues, IO] effs => Eff effs [FilePath]
 saveAllIssues = get >>= fmap M.elems . traverse saveIssue . unIssues
@@ -405,6 +452,7 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
       response <- sendM $ do
         -- Initialise requests
         initReq <- parseRequest $ "https://api.github.com/repos/" <> repository <> "/issues"
+
         -- Add headers
         let reqIssues =
               initReq
@@ -425,7 +473,9 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
                 , ("page", Just $ fromString $ show n)
                 ]
                 reqIssues
+        print @String (show initReq)
         getResponseBody <$> httpBS reqIssues'
+
       case (decode @[T.Entry]) $ LB.packBytes $ BS.unpack response of
         Nothing -> do
           logS ["getResponseBody", "Decode"] "Decoding failed! Here's what I received when pulling the issues:"
@@ -436,18 +486,19 @@ pullIssuesImpl = goFromUntil 1 (== mempty) pullPage
           modify (\(Issues s) -> Issues $ s `M.union` M.fromList issues)
           pure $ Issues $ M.fromList issues
 
-    toIssue entry =
-      ( T.number entry
-      , Issue
-          { title = unpack $ T.title entry
-          , content = unpack $ fromMaybe "" $ T.body entry
-          , labels = (\(T.Label x) -> unpack x) <$> T.labels entry
-          , number = T.number entry
-          , status = (\case "open" -> Open; _ -> Closed) $ T.state entry
-          }
-      )
+toIssue :: T.Entry -> (IssueN, Issue)
+toIssue entry =
+  ( T.number entry
+  , Issue
+      { title = unpack $ T.title entry
+      , content = unpack $ fromMaybe "" $ T.body entry
+      , labels = (\(T.Label x) -> unpack x) <$> T.labels entry
+      , number = T.number entry
+      , status = (\case "open" -> Open; _ -> Closed) $ T.state entry
+      }
+  )
 
-leafToMDPP :: forall effs. Members '[State Issues] effs => Leaf -> Eff effs String
+leafToMDPP :: forall effs. Members '[State Issues, Logger] effs => Leaf -> Eff effs String
 leafToMDPP Leaf {..} = do
   (Issues s) <- get
   formattedContent <- case issueN of
@@ -461,6 +512,9 @@ leafToMDPP Leaf {..} = do
       replaceNumbers bumpedContent
 
   let bumpedPreamble = bumpHeaders level $ unlines preamble
+
+  -- logS ["IssueBody"] $ formattedContent
+
   pure $ bumpedPreamble <> formattedContent
 
 -- | Replace issue numbers with title of the issue.
@@ -518,6 +572,7 @@ runPandoc fs = do
         , optOutputFile = Just outFileP
         , optInputFiles = Just [mdFile]
         , optTemplate = Just pTplFl
+        , optLogFile = Just "log.json"
         }
   sendM $ removeFile pTplFl
 
